@@ -1,0 +1,77 @@
+<div class="foods-layout">
+  <section class="card list">
+    <div class="row between">
+      <h2>Alimentos</h2>
+      <button type="button" class="btn small" (click)="add()">+ Nuevo</button>
+    </div>
+    <div class="field">
+      <label for="q" class="sr-only">Buscar alimento</label>
+      <input id="q" type="search" placeholder="Buscar alimento…" [ngModel]="query()" (ngModelChange)="query.set($event)" />
+    </div>
+    <p class="muted small">Hidratos por 100 g de alimento (cocido o tal como se come). Toca uno para editarlo.</p>
+
+    @for (g of groups(); track g.name) {
+      <h3 class="group">{{ g.name }}</h3>
+      <ul class="food-list">
+        @for (f of g.foods; track f.id) {
+          <li>
+            <button type="button" [class.on]="f.id === selectedId()" (click)="select(f)">
+              <span>{{ f.name }}</span>
+              <strong>{{ fmt(f.carbsPer100g) }} g</strong>
+            </button>
+          </li>
+        }
+      </ul>
+    } @empty {
+      <p class="muted">Ningún alimento coincide con la búsqueda.</p>
+    }
+  </section>
+
+  @if (sel(); as f) {
+    <section class="card editor" aria-label="Editar alimento">
+      <div class="row between">
+        <h3>Editar alimento</h3>
+        <button type="button" class="icon-btn" (click)="selectedId.set('')" aria-label="Cerrar editor">×</button>
+      </div>
+
+      <div class="field">
+        <label for="fn">Nombre</label>
+        <input id="fn" type="text" [(ngModel)]="f.name" />
+      </div>
+      <div class="field">
+        <label for="fg">Grupo</label>
+        <select id="fg" [(ngModel)]="f.group">
+          @for (g of groupNames; track g) {
+            <option [value]="g">{{ g }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fr">Cantidad de referencia: <strong>{{ refGrams() }} g</strong></label>
+        <input id="fr" type="range" min="10" max="100" step="1" [ngModel]="refGrams()" (ngModelChange)="refGrams.set($event)" />
+        <div class="range-scale" aria-hidden="true"><span>10 g</span><span>100 g</span></div>
+      </div>
+
+      <div class="field">
+        <label for="fc">Hidratos en {{ refGrams() }} g (gramos)</label>
+        <input
+          id="fc"
+          type="number"
+          inputmode="decimal"
+          min="0"
+          step="0.1"
+          [ngModel]="carbsAtRef(f)"
+          (ngModelChange)="setCarbsAtRef(f, $event)"
+        />
+      </div>
+
+      <p class="muted">
+        Equivale a <strong>{{ fmt(f.carbsPer100g) }} g</strong> de hidratos por 100 g y a
+        <strong>{{ fmt(rationsAtRef(f)) }}</strong> raciones en {{ refGrams() }} g.
+      </p>
+
+      <button type="button" class="btn danger" (click)="remove(f)">Eliminar alimento</button>
+    </section>
+  }
+</div>

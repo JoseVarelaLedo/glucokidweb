@@ -1,0 +1,170 @@
+<section class="card">
+  <h2>Usuarios</h2>
+  <p class="muted small">
+    Cada <strong>niño</strong> tiene sus propios registros, alimentos, ajustes y documentos. Varias cuentas (padre, madre, abuela…) pueden
+    compartir los datos de un mismo niño, cada una con su correo y contraseña: así los avisos indican quién registró cada medición.
+    Los administradores ven los de todos.
+  </p>
+
+  @for (u of users.list(); track u.uid) {
+    <div class="user-row">
+      <div>
+        <strong>{{ u.name }}</strong>
+        <span class="chip" [class.ok]="u.role === 'admin'">{{ u.role === 'admin' ? 'Administrador' : 'Usuario' }}</span>
+        @if (!u.active) {
+          <span class="chip warn">Desactivado</span>
+        }
+        @if (!u.dataUid) {
+          <span class="chip">Datos propios{{ dependents(u) ? ' · compartidos con ' + dependents(u) : '' }}</span>
+        } @else {
+          <span class="chip">Comparte datos de {{ spaceName(u.dataUid) }}</span>
+        }
+        <div class="muted small">{{ u.email }}</div>
+      </div>
+
+      <div class="field">
+        <label [attr.for]="'sp-' + u.uid">Datos que usa</label>
+        <select
+          [id]="'sp-' + u.uid"
+          [ngModel]="u.dataUid || ''"
+          (ngModelChange)="update(u, { dataUid: $event })"
+          [disabled]="u.uid === auth.uid() || dependents(u) > 0"
+        >
+          <option value="">Propios (un niño)</option>
+          @for (s of otherSpaces(u); track s.uid) {
+            <option [value]="s.uid">Comparte los de {{ s.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn small" (click)="view(u)">Ver sus datos</button>
+        <button type="button" class="btn small ghost" (click)="reset(u)">Restablecer contraseña</button>
+        @if (u.uid !== auth.uid()) {
+          <button type="button" class="btn small ghost" (click)="update(u, { role: u.role === 'admin' ? 'user' : 'admin' })">
+            {{ u.role === 'admin' ? 'Quitar admin' : 'Hacer admin' }}
+          </button>
+          <button type="button" class="btn small ghost" (click)="update(u, { active: !u.active })">
+            {{ u.active ? 'Desactivar' : 'Activar' }}
+          </button>
+        }
+      </div>
+    </div>
+  } @empty {
+    <p class="muted">Cargando usuarios…</p>
+  }
+</section>
+
+<section class="card">
+  <h2>Invitar por enlace</h2>
+  <p class="muted small">
+    La persona invitada crea su <strong>propia cuenta</strong> desde el enlace (con su correo y contraseña) y comparte los datos del niño que elijas.
+    El enlace es de <strong>un solo uso</strong> y caduca. Quien lo tenga podrá crear una cuenta, así que envíalo solo a la persona invitada.
+  </p>
+  <div class="field">
+    <label for="iv-space">Niño</label>
+    <select id="iv-space" [(ngModel)]="invSpace">
+      @for (s of users.spaces(); track s.uid) {
+        <option [value]="s.uid">{{ s.name }}</option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label for="iv-label">Para quién (opcional, solo para que lo reconozcas)</label>
+    <input id="iv-label" type="text" maxlength="60" placeholder="p. ej. Abuela María" [(ngModel)]="invLabel" />
+  </div>
+  <div class="field">
+    <label for="iv-days">Caduca en</label>
+    <select id="iv-days" [(ngModel)]="invDays">
+      <option [ngValue]="1">1 día</option>
+      <option [ngValue]="3">3 días</option>
+      <option [ngValue]="7">7 días</option>
+      <option [ngValue]="30">30 días</option>
+    </select>
+  </div>
+  @if (invErr()) {
+    <p class="error" role="alert">{{ invErr() }}</p>
+  }
+  @if (invMsg()) {
+    <p class="notice ok" role="status">{{ invMsg() }}</p>
+  }
+  <button type="button" class="btn primary" [disabled]="invBusy() || !invSpace" (click)="createInvite()">
+    {{ invBusy() ? 'Creando…' : 'Crear invitación' }}
+  </button>
+
+  @if (justCreated(); as c) {
+    <div class="invite-new">
+      <p><strong>Invitación creada.</strong> Envía este enlace a la persona invitada:</p>
+      <input type="text" readonly class="mono" aria-label="Enlace de invitación" [value]="link(c)" (focus)="$any($event.target).select()" />
+      <div class="inline">
+        <button type="button" class="btn small" (click)="copy(c)">Copiar enlace</button>
+        <a class="btn small ghost" [href]="whatsapp(c)" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+        @if (canShare) {
+          <button type="button" class="btn small ghost" (click)="share(c)">Compartir…</button>
+        }
+      </div>
+    </div>
+  }
+
+  @if (invites.list().length) {
+    <h3>Invitaciones pendientes</h3>
+    @for (i of invites.list(); track i.code) {
+      <div class="user-row">
+        <div>
+          <strong>{{ i.label || 'Sin nombre' }}</strong>
+          <span class="chip">{{ i.spaceName }}</span>
+          @if (expired(i)) {
+            <span class="chip warn">Caducada</span>
+          }
+          <div class="muted small">{{ expired(i) ? 'Caducó' : 'Caduca' }} el {{ when(i.expiresAt) }} · creada por {{ i.createdByName }}</div>
+        </div>
+        <div class="actions">
+          @if (!expired(i)) {
+            <button type="button" class="btn small ghost" (click)="copy(i)">Copiar enlace</button>
+          }
+          <button type="button" class="btn small ghost" (click)="revoke(i)">{{ expired(i) ? 'Borrar' : 'Anular' }}</button>
+        </div>
+      </div>
+    }
+  }
+</section>
+
+<section class="card">
+  <h2>Crear cuenta a mano</h2>
+  <p class="muted small">Alternativa a la invitación: tú eliges el correo y la contraseña inicial.</p>
+  <div class="field">
+    <label for="nu-name">Nombre (p. ej. «Mamá» o el nombre del niño)</label>
+    <input id="nu-name" type="text" [(ngModel)]="name" />
+  </div>
+  <div class="field">
+    <label for="nu-mail">Correo electrónico</label>
+    <input id="nu-mail" type="email" autocomplete="off" [(ngModel)]="email" />
+  </div>
+  <div class="field">
+    <label for="nu-pass">Contraseña inicial (mín. 6 caracteres)</label>
+    <input id="nu-pass" type="password" autocomplete="new-password" [(ngModel)]="password" />
+  </div>
+  <div class="field">
+    <label for="nu-share">Datos</label>
+    <select id="nu-share" [(ngModel)]="shareWith">
+      <option value="">Propios (es un niño nuevo)</option>
+      @for (s of users.spaces(); track s.uid) {
+        <option [value]="s.uid">Comparte los datos de {{ s.name }}</option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label for="nu-role">Rol</label>
+    <select id="nu-role" [(ngModel)]="role">
+      <option value="user">Usuario (solo sus datos)</option>
+      <option value="admin">Administrador (todos los datos)</option>
+    </select>
+  </div>
+  @if (err()) {
+    <p class="error" role="alert">{{ err() }}</p>
+  }
+  @if (msg()) {
+    <p class="notice ok" role="status">{{ msg() }}</p>
+  }
+  <button type="button" class="btn primary" [disabled]="busy()" (click)="create()">{{ busy() ? 'Creando…' : 'Crear cuenta' }}</button>
+</section>

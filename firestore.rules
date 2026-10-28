@@ -1,0 +1,91 @@
+rules_version = '2';
+
+// Modelo de seguridad:
+//  - users/{uid}            perfil: rol ('admin' | 'user'), 'active' y, opcionalmente, 'dataUid'.
+//  - users/{uid}/...        datos de un niño (días, ajustes, alimentos, documentos, avisos, dispositivos).
+//  - invites/{codigo}       invitaciones de alta (las crea un administrador; ver "altaPorInvitacion").
+//
+// 'dataUid' permite que VARIAS cuentas (padre, madre, abuela...) usen el espacio de datos
+// de un mismo niño: cada una entra con su propio correo y contraseña, y los avisos
+// indican quién registró cada medición.
+//
+// Cada cuenta solo accede a su espacio (o al del niño con el que comparte);
+// los administradores, a todos. Nadie puede modificar su propio perfil (así no puede
+// ascenderse a admin ni enlazarse a los datos de otro niño): solo escriben en
+// users/{uid} los administradores.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function perfil(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+    function tienePerfil(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+    function conSesion() {
+      return request.auth != null;
+    }
+    function activa() {
+      return conSesion()
+        && tienePerfil(request.auth.uid)
+        && perfil(request.auth.uid).get('active', true) == true;
+    }
+    function esAdmin() {
+      return activa() && perfil(request.auth.uid).role == 'admin';
+    }
+    // ¿Esta cuenta puede usar el espacio de datos "uid"? (el suyo o el compartido)
+    function esMiembro(uid) {
+      return activa()
+        && (request.auth.uid == uid || perfil(request.auth.uid).get('dataUid', '') == uid);
+    }
+
+    // Alta de una cuenta nueva con invitación. Solo se permite crear el PROPIO perfil, siempre como usuario normal
+    // y activo, con los datos del niño de una invitación que exista, no haya caducado y se consuma (se borre) en la
+    // MISMA operación, de modo que cada invitación sirve para una sola alta.
+    function altaPorInvitacion(uid) {
+      let d = request.resource.data;
+      let inv = /databases/$(database)/documents/invites/$(d.invite);
+      return conSesion()
+        && request.auth.uid == uid
+        && d.keys().hasOnly(['email', 'name', 'role', 'active', 'dataUid', 'invite'])
+        && d.role == 'user'
+        && d.active == true
+        && d.email == request.auth.token.email
+        && d.name is string && d.name.size() <= 80
+        && d.invite is string
+        && exists(inv)
+        && get(inv).data.dataUid == d.dataUid
+        && get(inv).data.expiresAt > request.time.toMillis()
+        && !existsAfter(inv);
+    }
+
+    match /users/{uid} {
+      // Cada uno puede leer su propio perfil (para saber su rol) y el del niño con el que comparte.
+      allow get: if (conSesion() && request.auth.uid == uid) || esMiembro(uid) || esAdmin();
+      allow list: if esAdmin();
+      allow create: if esAdmin() || altaPorInvitacion(uid);
+      allow update, delete: if esAdmin();
+    }
+
+    match /invites/{codigo} {
+      // Quien tiene el enlace puede leer SU invitación (el código es imposible de adivinar); listar, solo administradores.
+      allow get: if true;
+      allow list, create: if esAdmin();
+      allow update: if false;
+      // Borrar: el administrador (revocar) o la persona que se da de alta con ella, en la misma operación que crea su perfil.
+      allow delete: if esAdmin()
+        || (conSesion() && !tienePerfil(request.auth.uid)
+            && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.invite == codigo);
+    }
+
+    match /users/{uid}/{resto=**} {
+      allow read, write: if esMiembro(uid) || esAdmin();
+    }
+
+    // Todo lo demás, cerrado
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

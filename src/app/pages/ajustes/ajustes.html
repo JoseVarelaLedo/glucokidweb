@@ -1,0 +1,260 @@
+<section class="card">
+  <h2>Administraciones de insulina</h2>
+  <p class="muted small">
+    Por defecto son 5: cuatro de rápida (desayuno, comida, merienda y cena) y una lenta. Los cambios se aplican a hoy y a los
+    días siguientes; los días ya registrados no se modifican.
+  </p>
+
+  @for (inj of data.settings().injections; track inj.id; let i = $index) {
+    <div class="inj-row">
+      <div class="field">
+        <label [attr.for]="'in-' + inj.id">Nombre</label>
+        <input [id]="'in-' + inj.id" type="text" [(ngModel)]="inj.name" />
+      </div>
+      <div class="field">
+        <label [attr.for]="'ik-' + inj.id">Tipo</label>
+        <select [id]="'ik-' + inj.id" [(ngModel)]="inj.kind">
+          <option value="rapida">Rápida (con comida)</option>
+          <option value="lenta">Lenta</option>
+        </select>
+      </div>
+      <div class="field">
+        <label [attr.for]="'im-' + inj.id">Máx. unidades</label>
+        <input [id]="'im-' + inj.id" type="number" inputmode="numeric" min="1" max="100" step="1" [(ngModel)]="inj.maxUnits" />
+      </div>
+      <div class="field">
+        <label [attr.for]="'id-' + inj.id">Unidades por defecto</label>
+        <select [id]="'id-' + inj.id" [(ngModel)]="inj.defaultUnits">
+          <option [ngValue]="null">Sin propuesta</option>
+          @for (u of defaultOptions(inj); track u) {
+            <option [ngValue]="u">{{ fmt(u) }} U</option>
+          }
+        </select>
+        <p class="muted small">Se propone al anotar la glucemia; en cada comida se puede cambiar.</p>
+      </div>
+      <label class="check" [attr.for]="'io-' + inj.id">
+        <input [id]="'io-' + inj.id" type="checkbox" [(ngModel)]="inj.optional" />
+        Comida opcional (no cuenta como pendiente)
+      </label>
+      <div class="inj-actions">
+        <button type="button" class="icon-btn" (click)="move(i, -1)" [disabled]="i === 0" aria-label="Subir">↑</button>
+        <button type="button" class="icon-btn" (click)="move(i, 1)" [disabled]="i === data.settings().injections.length - 1" aria-label="Bajar">↓</button>
+        <button type="button" class="icon-btn danger" (click)="removeInjection(i)" [disabled]="data.settings().injections.length <= 1" aria-label="Quitar">×</button>
+      </div>
+    </div>
+  }
+  <button type="button" class="btn ghost" (click)="addInjection()">+ Añadir administración</button>
+
+  <div class="field">
+    <label for="step">Escalón del desplegable de unidades</label>
+    <select id="step" [(ngModel)]="data.settings().doseStep">
+      <option [ngValue]="0.5">Enteras y medias unidades (0,5)</option>
+      <option [ngValue]="1">Solo unidades enteras (1)</option>
+    </select>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Cálculo de raciones</h2>
+  <p class="muted small">Se usa en la calculadora. Si cambian las necesidades, ajústalo aquí.</p>
+  <div class="two-cols">
+    <div class="field">
+      <label for="gpr">Gramos de hidratos por ración</label>
+      <input id="gpr" type="number" inputmode="decimal" min="1" step="1" [(ngModel)]="data.settings().gramsPerRation" />
+    </div>
+    <div class="field">
+      <label for="upr">Unidades de rápida por ración</label>
+      <input id="upr" type="number" inputmode="decimal" min="0" step="0.1" [(ngModel)]="data.settings().unitsPerRation" />
+    </div>
+  </div>
+  <p class="muted">
+    Ahora: 1 ración = {{ fmt(data.settings().gramsPerRation) }} g de hidratos = {{ fmt(data.settings().unitsPerRation) }} U de rápida.
+  </p>
+  <div class="field">
+    <label for="tg">Glucemia objetivo para correcciones (mg/dL)</label>
+    <input id="tg" type="number" inputmode="numeric" min="70" max="250" step="5" [(ngModel)]="data.settings().targetGlucose" />
+  </div>
+</section>
+
+<section class="card">
+  <h2>Calorías diarias</h2>
+  <p class="muted small">Referencia para repartir los hidratos del día (no cambia ninguna dosis).</p>
+  <div class="two-cols">
+    <div class="field">
+      <label for="kcal">Calorías al día</label>
+      <input id="kcal" type="number" inputmode="numeric" min="0" step="50" placeholder="p. ej. 1800" [(ngModel)]="data.settings().dailyCalories" />
+    </div>
+    <div class="field">
+      <label for="kpc">% en hidratos</label>
+      <input id="kpc" type="number" inputmode="numeric" min="10" max="80" step="1" [(ngModel)]="data.settings().carbPercent" />
+    </div>
+  </div>
+  @if (carbGramsPerDay(); as g) {
+    <p class="muted">≈ <strong>{{ fmt(g, 0) }} g</strong> de hidratos al día ≈ <strong>{{ fmt(rationsPerDay(), 1) }}</strong> raciones.</p>
+  }
+  <p class="muted small">El porcentaje es una referencia editable: confirmadlo con vuestro equipo de nutrición.</p>
+</section>
+
+<section class="card">
+  <h2>Factor de sensibilidad</h2>
+  <p class="muted small">
+    Cuántos mg/dL baja 1 U de rápida. Se estima con la insulina total diaria; si el equipo médico os ha dado un valor,
+    escríbelo directamente en el último campo.
+  </p>
+  <div class="two-cols">
+    <div class="field">
+      <label for="dr">Insulina rápida al día (U)</label>
+      <input id="dr" type="number" inputmode="decimal" min="0" step="0.5" [(ngModel)]="data.settings().dailyRapid" />
+    </div>
+    <div class="field">
+      <label for="dl">Insulina lenta al día (U)</label>
+      <input id="dl" type="number" inputmode="decimal" min="0" step="0.5" [(ngModel)]="data.settings().dailyLenta" />
+    </div>
+  </div>
+  <div class="field">
+    <p class="muted small">Factor de sensibilidad = 1700 ÷ insulina diaria total (rápida + lenta).</p>
+  </div>
+  <p class="muted">Total diario: <strong>{{ fmt(totalDaily(), 1) }} U</strong>
+    @if (ratioHint(); as r) { · como referencia, la «regla de 500» sugiere ≈ 1 U por {{ fmt(r, 1) }} g de hidratos }
+  </p>
+  <button type="button" class="btn" (click)="calcIsf()">Calcular factor de sensibilidad</button>
+  @if (isfMsg()) {
+    <p class="notice ok" role="status">{{ isfMsg() }}</p>
+  }
+  <div class="field">
+    <label for="isf">Factor de sensibilidad actual (mg/dL por U)</label>
+    <input id="isf" type="number" inputmode="decimal" min="1" step="0.5" placeholder="Sin calcular" [(ngModel)]="data.settings().isf" />
+  </div>
+  <p class="muted small">Es una regla orientativa. Contrástalo con el equipo médico antes de usarlo para correcciones.</p>
+</section>
+
+@if (data.settings().model; as m) {
+  <section class="card">
+    <details>
+      <summary><strong>Modelo predictivo (avanzado)</strong></summary>
+      <p class="muted small">
+        Valores típicos de un análogo de acción rápida. Solo afectan a la curva prevista, nunca a la calculadora.
+      </p>
+      <div class="two-cols">
+        <div class="field">
+          <label for="m1">Duración de la insulina (min)</label>
+          <input id="m1" type="number" inputmode="numeric" min="120" max="480" step="15" [(ngModel)]="m.diaMin" />
+        </div>
+        <div class="field">
+          <label for="m2">Pico de acción (min)</label>
+          <input id="m2" type="number" inputmode="numeric" min="30" max="180" step="5" [(ngModel)]="m.peakMin" />
+        </div>
+        <div class="field">
+          <label for="m3">Absorción de hidratos (min)</label>
+          <input id="m3" type="number" inputmode="numeric" min="60" max="480" step="15" [(ngModel)]="m.carbMin" />
+        </div>
+        <div class="field">
+          <label for="m4">Ídem con grasas/proteínas (min)</label>
+          <input id="m4" type="number" inputmode="numeric" min="60" max="600" step="15" [(ngModel)]="m.carbMinFat" />
+        </div>
+      </div>
+      <button type="button" class="btn ghost small" (click)="resetModel()">Restaurar valores típicos</button>
+    </details>
+  </section>
+}
+
+@if (!valid()) {
+  <p class="notice" role="alert">Hay datos sin completar (nombre, unidades máximas o raciones). No se guardará hasta que estén correctos.</p>
+}
+
+@if (auth.status() === 'signedIn') {
+  <section class="card">
+    <h2>Cuenta</h2>
+    <p class="muted">Sesión iniciada como <strong>{{ auth.email() }}</strong>.</p>
+    <button type="button" class="btn" (click)="auth.logout()">Cerrar sesión</button>
+  </section>
+} @else if (auth.status() === 'local') {
+  <section class="card">
+    <h2>Almacenamiento</h2>
+    <p class="muted">
+      Modo local: los datos se guardan solo en este navegador. Para sincronizarlos entre dispositivos, configura Firebase
+      (consulta el README).
+    </p>
+  </section>
+}
+
+<section class="card">
+  <h2>Avisos entre cuidadores</h2>
+  <p class="muted small">
+    Cuando alguien registra una glucemia de <strong>hipoglucemia (&lt; 70)</strong> o <strong>hiperglucemia (&gt; 350)</strong>, los demás
+    cuidadores que comparten este niño reciben un aviso en la aplicación, con sonido y vibración si lo activas.
+  </p>
+  <label class="check">
+    <input type="checkbox" [checked]="alerts.sound()" (change)="alerts.setSound($any($event.target).checked)" />
+    Sonido y vibración al recibir un aviso
+  </label>
+  @switch (alerts.permission()) {
+    @case ('granted') {
+      <p class="notice ok" role="status">Notificaciones del navegador activadas en este dispositivo.</p>
+    }
+    @case ('denied') {
+      <p class="notice">Las notificaciones están bloqueadas en este navegador. Actívalas en los permisos del sitio.</p>
+    }
+    @case ('unsupported') {
+      <p class="muted small">Este navegador no admite notificaciones; los avisos se mostrarán dentro de la aplicación.</p>
+    }
+    @default {
+      <button type="button" class="btn" (click)="alerts.enableNotifications()">Activar notificaciones en este dispositivo</button>
+    }
+  }
+  @if (push.available()) {
+    <h3>Avisos con la aplicación cerrada</h3>
+    @switch (push.state()) {
+      @case ('on') {
+        <p class="notice ok" role="status">Este dispositivo recibirá los avisos aunque la aplicación esté cerrada.</p>
+        <button type="button" class="btn ghost" (click)="push.disable()">Dejar de recibir en este dispositivo</button>
+      }
+      @case ('blocked') {
+        <p class="notice">Las notificaciones están bloqueadas en este navegador. Actívalas en los permisos del sitio y vuelve aquí.</p>
+      }
+      @case ('needs-install') {
+        <p class="notice">
+          En iPhone/iPad, para recibir avisos con la aplicación cerrada hay que añadir esta web a la pantalla de inicio
+          (Compartir → «Añadir a pantalla de inicio») y abrirla desde ese icono.
+        </p>
+      }
+      @default {
+        <button type="button" class="btn" [disabled]="push.state() === 'busy'" (click)="push.enable()">
+          {{ push.state() === 'busy' ? 'Activando…' : 'Recibir avisos aunque la aplicación esté cerrada' }}
+        </button>
+      }
+    }
+    @if (push.error()) {
+      <p class="notice" role="alert">{{ push.error() }}</p>
+    }
+    <p class="muted small">
+      Se activa en cada dispositivo. Al cerrar sesión, ese dispositivo deja de recibir avisos. Los avisos no incluyen más datos que el valor,
+      la hora y quién lo registró.
+    </p>
+  } @else {
+    <p class="muted small">
+      Los avisos llegan mientras la aplicación esté abierta (aunque sea en segundo plano). Para recibirlos también con la aplicación cerrada
+      hay que configurar los avisos push (ver PUSH.md).
+    </p>
+  }
+</section>
+
+<section class="card">
+  <h2>Copia de seguridad</h2>
+  <p class="muted small">
+    Descarga todos los registros, ajustes, alimentos y documentos de este niño en un fichero JSON. Hazlo de vez en cuando:
+    el plan gratuito de Firebase no incluye copias automáticas.
+  </p>
+  <button type="button" class="btn" [disabled]="backupBusy()" (click)="backup()">{{ backupBusy() ? 'Preparando…' : 'Descargar copia (JSON)' }}</button>
+  @if (backupMsg()) {
+    <p class="notice ok" role="status">{{ backupMsg() }}</p>
+  }
+</section>
+
+<section class="card">
+  <h2>Acerca de</h2>
+  <p class="muted small">
+    GlucoKid es una herramienta de registro y cálculo de apoyo. No sustituye al criterio de la familia ni a las indicaciones
+    de vuestro equipo de endocrinología; ante cualquier duda sobre una dosis, consultadlo.
+  </p>
+</section>

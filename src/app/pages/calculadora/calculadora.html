@@ -1,0 +1,163 @@
+<section class="card intro">
+  <h2>Calculadora de insulina rápida</h2>
+  <p class="muted">
+    1 ración = <strong>{{ fmt(data.settings().gramsPerRation) }} g</strong> de hidratos ·
+    1 ración = <strong>{{ fmt(data.settings().unitsPerRation) }} U</strong> de rápida.
+    <a routerLink="/ajustes">Cambiar</a>
+  </p>
+  <p class="muted small">Introduce el peso <strong>cocido</strong> de cada ingrediente. Proteínas, grasas y verduras verdes cuentan 0 g de hidratos.</p>
+</section>
+
+<div class="seg tabs" role="tablist" aria-label="Tipo de cálculo">
+  <button type="button" role="tab" [class.on]="calc.tab() === 'comida'" [attr.aria-selected]="calc.tab() === 'comida'" (click)="calc.tab.set('comida')">Comida</button>
+  <button type="button" role="tab" [class.on]="calc.tab() === 'correccion'" [attr.aria-selected]="calc.tab() === 'correccion'" (click)="calc.tab.set('correccion')">Corrección por hiperglucemia</button>
+</div>
+
+@if (calc.tab() === 'comida') {
+<div class="calc-rows">
+  @for (r of calc.rows(); track r.id) {
+    <div class="card calc-row">
+      <div class="field">
+        <label [attr.for]="'f-' + r.id">Alimento</label>
+        <select [id]="'f-' + r.id" [(ngModel)]="r.foodId">
+          <option value="">Elegir…</option>
+          @for (g of groups(); track g.name) {
+            <optgroup [label]="g.name">
+              @for (f of g.foods; track f.id) {
+                <option [value]="f.id">{{ f.name }}</option>
+              }
+            </optgroup>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label [attr.for]="'g-' + r.id">Peso cocido (g)</label>
+        <input [id]="'g-' + r.id" type="number" inputmode="decimal" min="0" step="1" placeholder="0" [(ngModel)]="r.grams" />
+      </div>
+      <div class="row-carbs" aria-live="polite">
+        @if (rowCarbs(r) !== null) {
+          <strong>{{ fmt(rowCarbs(r), 1) }} g</strong>&nbsp;<span class="muted">de hidratos</span>
+        } @else {
+          <span class="muted">—</span>
+        }
+      </div>
+      <button type="button" class="icon-btn danger" (click)="calc.remove(r.id)" aria-label="Quitar ingrediente">×</button>
+    </div>
+  }
+</div>
+
+<div class="actions">
+  <button type="button" class="btn ghost" (click)="calc.add()">+ Añadir ingrediente</button>
+  <button type="button" class="btn primary big" (click)="calculate()">Calcular</button>
+  <button type="button" class="btn ghost small" (click)="calc.clear()">Vaciar</button>
+</div>
+
+@if (incomplete() > 0) {
+  <p class="notice">Hay {{ incomplete() }} ingrediente(s) sin alimento o sin peso: no se han incluido en el cálculo.</p>
+}
+
+@if (calc.result(); as res) {
+  <section class="card result" [class.stale]="stale()">
+    @if (stale()) {
+      <p class="notice">Has cambiado datos desde el último cálculo. Pulsa <strong>Calcular</strong> para actualizar.</p>
+    }
+    <p class="muted">Insulina rápida sugerida</p>
+    <div class="big-number">{{ fmt(res.dose.roundedUnits) }} <span>U</span></div>
+    <p class="muted small">
+      Redondeada a {{ fmt(res.dose.step) }} U · valor exacto {{ fmt(res.dose.totalUnits) }} U
+    </p>
+
+    <dl class="summary">
+      <div><dt>Hidratos totales</dt><dd>{{ fmt(res.dose.carbsGrams, 1) }} g</dd></div>
+      <div><dt>Raciones</dt><dd>{{ fmt(res.dose.rations) }}</dd></div>
+      <div><dt>Relación</dt><dd>1 ración = {{ fmt(data.settings().unitsPerRation) }} U</dd></div>
+    </dl>
+
+    <table class="lines">
+      <caption class="sr-only">Detalle por ingrediente</caption>
+      <thead><tr><th scope="col">Ingrediente</th><th scope="col">Peso</th><th scope="col">Hidratos</th></tr></thead>
+      <tbody>
+        @for (l of res.lines; track $index) {
+          <tr><td>{{ l.name }}</td><td>{{ fmt(l.grams) }} g</td><td>{{ fmt(l.carbs, 1) }} g</td></tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="transfer">
+      <div class="field">
+        <label for="target">Pasar al registro de hoy</label>
+        <select id="target" [(ngModel)]="targetId">
+          @for (i of rapidas(); track i.id) {
+            <option [value]="i.id">{{ i.name }}</option>
+          }
+        </select>
+      </div>
+      <button type="button" class="btn" [disabled]="!targetId || stale()" (click)="transfer(res)">Añadir al registro</button>
+    </div>
+    @if (message()) {
+      <p class="notice ok" role="status">{{ message() }}</p>
+    }
+
+    <p class="disclaimer">
+      Es una ayuda de cálculo basada en los datos de «Ajustes» y «Alimentos». La dosis final la decide la familia
+      siguiendo la pauta de su equipo médico.
+    </p>
+  </section>
+}
+} @else {
+  <section class="card intro">
+    <h2>Corrección por hiperglucemia</h2>
+    <p class="muted small">
+      Unidades de rápida = (glucemia real − glucemia objetivo) ÷ factor de sensibilidad, redondeado a unidades enteras.
+    </p>
+  </section>
+
+  @if (!isf()) {
+    <p class="notice">
+      Falta el factor de sensibilidad. Calcúlalo en <a routerLink="/ajustes">Ajustes</a> con la insulina total diaria.
+    </p>
+  }
+
+  <section class="card">
+    <div class="two-cols">
+      <div class="field">
+        <label for="cur">Glucemia real ahora (mg/dL)</label>
+        <input id="cur" type="number" inputmode="numeric" min="20" max="600" step="1" placeholder="—" [ngModel]="calc.current()" (ngModelChange)="calc.current.set($event)" />
+      </div>
+      <div class="field">
+        <label for="tgt">Glucemia objetivo (mg/dL)</label>
+        <input id="tgt" type="number" inputmode="numeric" min="70" max="250" step="5" [ngModel]="targetValue()" (ngModelChange)="calc.target.set($event)" />
+      </div>
+    </div>
+    <p class="muted small">Factor de sensibilidad: 1 U baja ≈ {{ isf() ? fmt(isf(), 1) : '—' }} mg/dL. <a routerLink="/ajustes">Cambiar</a></p>
+  </section>
+
+  @if (correction(); as c) {
+    <section class="card result">
+      @if (calc.current()! < 70) {
+        <p class="notice" role="alert">Glucemia por debajo de 70 mg/dL (hipoglucemia): no se corrige. Sigue el protocolo de hipoglucemia de vuestro equipo médico.</p>
+      } @else {
+        <p class="muted">Insulina rápida de corrección</p>
+        <div class="big-number">{{ fmt(c.units, 0) }} <span>U</span></div>
+        <p class="muted small">
+          ({{ calc.current() }} − {{ fmt(targetValue(), 0) }}) ÷ {{ fmt(isf(), 1) }} = {{ fmt(c.exact, 2) }} → redondeado a {{ fmt(c.units, 0) }} U
+        </p>
+        @if (c.diff <= 0) {
+          <p class="notice ok">La glucemia no supera el objetivo: no hace falta corregir.</p>
+        }
+        @if (calc.current()! > 350) {
+          <p class="notice" role="alert">Glucemia por encima de 350 mg/dL: sigue la pauta del equipo médico (p. ej. cuándo comprobar cetonas).</p>
+        }
+        @if (iobNow() !== null && iobNow()! >= 0.5) {
+          <p class="notice">
+            Según el registro de hoy, aún quedan ≈ {{ fmt(iobNow(), 1) }} U de rápida activa de dosis anteriores. Tenlo en cuenta para no acumular insulina.
+          </p>
+        }
+      }
+      <p class="disclaimer">
+        Es una ayuda de cálculo basada en el factor de sensibilidad de «Ajustes». La dosis final la decide la familia siguiendo
+        la pauta de su equipo médico.
+      </p>
+    </section>
+  }
+}

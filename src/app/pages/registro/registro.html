@@ -1,0 +1,217 @@
+<datalist id="foods-dl">
+  @for (f of data.foods(); track f.id) {
+    <option [value]="f.name"></option>
+  }
+</datalist>
+<datalist id="activity-dl">
+  @for (a of activitySuggestions; track a) {
+    <option [value]="a"></option>
+  }
+</datalist>
+
+<div class="day-layout">
+  <aside class="day-aside">
+    <section class="card day-head">
+      <button type="button" class="icon-btn" (click)="shift(-1)" aria-label="Día anterior">‹</button>
+      <button
+        type="button"
+        class="date-btn"
+        (click)="calendarOpen.set(!calendarOpen())"
+        [attr.aria-expanded]="calendarOpen()"
+        aria-label="Abrir o cerrar el calendario"
+      >
+        <strong>{{ dateLabel() }}</strong>
+        <span class="muted">{{ isToday() ? 'Hoy' : 'Día pasado o futuro' }} · calendario ▾</span>
+      </button>
+      <button type="button" class="icon-btn" (click)="shift(1)" aria-label="Día siguiente">›</button>
+    </section>
+
+    @if (calendarOpen() || layout.mode() === 'desktop') {
+      <app-calendar [selected]="date()" [marks]="marks()" (pick)="onPick($event)" (monthChange)="ensureMonth($event)" />
+    }
+
+    @if (!isToday()) {
+      <button type="button" class="btn ghost small" (click)="onPick(today())">Volver a hoy</button>
+    }
+  </aside>
+
+  <div class="day-main" [class.is-loading]="loading()">
+    @if (loadError()) {
+      <section class="card center pad">
+        <p class="error">{{ loadError() }}</p>
+        <button type="button" class="btn primary" (click)="goTo(date())">Reintentar</button>
+      </section>
+    } @else if (loading() && !day) {
+      <p class="center muted pad">Cargando el día…</p>
+    }
+
+    @if (day; as d) {
+      <div class="meals">
+        @for (m of d.meals; track m.injectionId) {
+          <article class="block">
+            <div class="card meal" [class.open]="isOpen(m)">
+              <button type="button" class="meal-head" (click)="toggleOpen(m)" [attr.aria-expanded]="isOpen(m)">
+                <span class="meal-name">{{ m.name }}</span>
+                <span class="chips">
+                  @if (isIdleOptional(m)) {
+                    <span class="chip">Opcional · sin usar</span>
+                  } @else if (missing(m).length) {
+                    <span class="chip warn">Faltan {{ missing(m).join(', ') }}</span>
+                  } @else {
+                    <span class="chip ok">Completo</span>
+                  }
+                  @if (m.before.units !== null) {
+                    <span class="chip">{{ fmt(m.before.units) }} U</span>
+                  }
+                  @if (m.before.value !== null) {
+                    <span class="chip">{{ m.before.value }} mg/dL</span>
+                  }
+                </span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+
+              @if (isOpen(m)) {
+                <div class="meal-body">
+                  <h4>{{ m.kind === 'lenta' ? 'Administración' : 'Antes de comer' }} <span class="req-note">* obligatorio</span></h4>
+                  <app-reading-editor [reading]="m.before" [required]="true" />
+                  <div class="field" [class.missing]="m.before.units === null">
+                    <label [attr.for]="'u-' + m.injectionId">Unidades a administrar <span class="req">*</span></label>
+                    <select [id]="'u-' + m.injectionId" [(ngModel)]="m.before.units">
+                      <option [ngValue]="null">Elegir…</option>
+                      @for (u of unitOptions(m); track u) {
+                        <option [ngValue]="u">{{ fmt(u) }} U</option>
+                      }
+                    </select>
+                    @if (defaultUnits(m); as du) {
+                      <p class="muted small">Propuesta habitual: {{ fmt(du) }} U (se cambia en Ajustes).</p>
+                    }
+                  </div>
+
+                  @if (m.kind === 'rapida') {
+                    <h4>Comida</h4>
+                    <div class="field">
+                      <label [attr.for]="'ft-' + m.injectionId">Hora a la que va a comer</label>
+                      <div class="inline">
+                        <input [id]="'ft-' + m.injectionId" type="time" [(ngModel)]="m.foodTime" />
+                        <button type="button" class="chip-btn" (click)="setNow(m)">Ahora</button>
+                      </div>
+                    </div>
+                    @for (it of m.items; track it.id) {
+                      <div class="item-row">
+                        <input type="text" list="foods-dl" placeholder="Alimento" aria-label="Alimento" [(ngModel)]="it.name" />
+                        <input type="text" placeholder="Cantidad" aria-label="Cantidad" [(ngModel)]="it.quantity" />
+                        <button type="button" class="icon-btn danger" (click)="removeItem(m, it)" aria-label="Quitar alimento">×</button>
+                      </div>
+                    }
+                    <button type="button" class="btn ghost" (click)="addItem(m)">+ Añadir alimento</button>
+
+                    <h4>Al terminar de comer</h4>
+                    <app-reading-editor [reading]="m.after" />
+                  }
+                </div>
+              }
+            </div>
+
+            @if (canHaveExtras(m)) {
+            <div class="extras">
+              @for (x of extrasFor(d, m); track x.id) {
+                <div class="card extra">
+                  <div class="row between">
+                    <strong>Medición post {{ m.name.toLowerCase() }}</strong>
+                    <button type="button" class="icon-btn danger" (click)="removeExtra(d, x)" aria-label="Eliminar medición">×</button>
+                  </div>
+                  <div class="seg" role="radiogroup" aria-label="Tipo de medición">
+                    <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
+                    <button type="button" role="radio" [class.on]="x.source === 'capilar'" [attr.aria-checked]="x.source === 'capilar'" (click)="x.source = 'capilar'">Capilar</button>
+                  </div>
+                  <app-reading-editor [reading]="x" />
+                  <div class="field">
+                    <label [attr.for]="'xr-' + x.id">Raciones adicionales <small>(si ha tomado algo)</small></label>
+                    <input [id]="'xr-' + x.id" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" [(ngModel)]="x.extraRations" />
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'xn-' + x.id">Nota</label>
+                    <textarea [id]="'xn-' + x.id" rows="2" placeholder="Incidencias, qué ha tomado, cómo se encontraba…" [(ngModel)]="x.note"></textarea>
+                  </div>
+                </div>
+              }
+              <button type="button" class="btn ghost" (click)="addExtra(d, m)">+ Medición post {{ m.name.toLowerCase() }}</button>
+            </div>
+            }
+          </article>
+        }
+      </div>
+
+      <section class="activities">
+        <div class="section-head">
+          <h3>Actividad física</h3>
+          <button type="button" class="btn ghost" (click)="addActivity(d)">+ Añadir actividad</button>
+        </div>
+
+        @for (a of d.activities; track a.id) {
+          <article class="card activity">
+            <div class="row between">
+              <strong>Actividad</strong>
+              <button type="button" class="icon-btn danger" (click)="removeActivity(d, a)" aria-label="Eliminar actividad">×</button>
+            </div>
+
+            <div class="field">
+              <label [attr.for]="'at-' + a.id">Tipo de actividad</label>
+              <input [id]="'at-' + a.id" type="text" list="activity-dl" placeholder="Fútbol, natación…" [(ngModel)]="a.type" />
+            </div>
+
+            <div class="two-cols">
+              <div class="field">
+                <label [attr.for]="'as-' + a.id">Desde</label>
+                <div class="inline">
+                  <input [id]="'as-' + a.id" type="time" [(ngModel)]="a.start" />
+                  <button type="button" class="chip-btn" (click)="setActivityNow(a, 'start')">Ahora</button>
+                </div>
+              </div>
+              <div class="field">
+                <label [attr.for]="'ae-' + a.id">Hasta</label>
+                <div class="inline">
+                  <input [id]="'ae-' + a.id" type="time" [(ngModel)]="a.end" />
+                  <button type="button" class="chip-btn" (click)="setActivityNow(a, 'end')">Ahora</button>
+                </div>
+              </div>
+            </div>
+
+            <h4>Antes de empezar</h4>
+            <app-reading-editor [reading]="a.before" [showTime]="false" />
+
+            <h4>Al terminar</h4>
+            <app-reading-editor [reading]="a.after" [showTime]="false" />
+
+            <label class="check">
+              <input type="checkbox" [(ngModel)]="a.supplemented" />
+              Se ha suplementado con comida durante el ejercicio
+            </label>
+            @if (a.supplemented) {
+              <div class="field">
+                <label [attr.for]="'asd-' + a.id">¿Qué y cuánto?</label>
+                <input [id]="'asd-' + a.id" type="text" placeholder="Ej.: 1 zumo pequeño" [(ngModel)]="a.supplementDetail" />
+              </div>
+            }
+
+            <div class="field">
+              <label [attr.for]="'ai-' + a.id">Incidencias</label>
+              <textarea [id]="'ai-' + a.id" rows="2" placeholder="Hipoglucemia, molestias, cambio de plan…" [(ngModel)]="a.incident"></textarea>
+            </div>
+          </article>
+        } @empty {
+          <p class="muted">Sin actividad física registrada este día.</p>
+        }
+      </section>
+
+      <section class="curve-cta">
+        <button type="button" class="btn primary big" (click)="curveOpen.set(!curveOpen())" [attr.aria-expanded]="curveOpen()">
+          {{ curveOpen() ? 'Ocultar la curva de glucemia' : 'Ver la curva de glucemia del día' }}
+        </button>
+        @if (curveOpen()) {
+          <app-day-curve [day]="d" />
+        }
+      </section>
+    }
+  </div>
+</div>
