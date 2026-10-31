@@ -87,6 +87,22 @@ export class Alimentos implements DoCheck, OnDestroy {
     f.carbsPer100g = round((v * 100) / this.refGrams(), 4);
   }
 
+  /** Gramos de hidratos de una ración (Ajustes; 10 g por defecto). */
+  protected gramsPerRation(): number {
+    return this.data.settings().gramsPerRation || 10;
+  }
+
+  /** Gramos de ESTE alimento que equivalen a una ración (null si no tiene hidratos). */
+  protected rationGrams(f: Food): number | null {
+    return f.carbsPer100g > 0 ? round((this.gramsPerRation() * 100) / f.carbsPer100g, 1) : null;
+  }
+
+  /** Al editar «gramos por ración» se recalculan los hidratos por 100 g (que es lo que guarda el catálogo). */
+  protected setRationGrams(f: Food, value: number | null): void {
+    if (value === null || Number.isNaN(value) || value <= 0) return;
+    f.carbsPer100g = round((this.gramsPerRation() * 100) / value, 4);
+  }
+
   protected rationsAtRef(f: Food): number {
     const g = this.data.settings().gramsPerRation || 10;
     return (f.carbsPer100g * this.refGrams()) / 100 / g;

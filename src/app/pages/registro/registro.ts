@@ -8,6 +8,7 @@ import { LayoutService } from '../../core/layout.service';
 import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan } from '../../core/models';
 import { addDays, canon, fmtNum, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
 import { emptyReading, planTotal } from '../../core/defaults';
+import { findFood } from '../../core/predict';
 import { Calendar } from '../../shared/calendar';
 import { DayCurve } from '../../shared/day-curve';
 import { ReadingEditor } from '../../shared/reading-editor';
@@ -283,6 +284,22 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
     const p = this.data.settings().injections.find((i) => i.id === m.injectionId)?.plan;
     const total = planTotal(p);
     return p && total > 0 ? { ...p, total } : null;
+  }
+
+  /** Gramos de un alimento del catálogo que equivalen a una ración (null si no tiene hidratos). */
+  protected foodRationGrams(f: { carbsPer100g: number }): number | null {
+    return f.carbsPer100g > 0 ? (this.gramsPerRation() * 100) / f.carbsPer100g : null;
+  }
+
+  /** Equivalencia en gramos del alimento escrito (si está en el catálogo): «1 ración de Pasta cocida = 40 g · 2 rac. ≈ 80 g». */
+  protected foodHint(it: FoodEntry): string | null {
+    const f = findFood(it.name ?? '', this.data.foods());
+    if (!f) return null;
+    const g = this.foodRationGrams(f);
+    if (g === null) return `${f.name}: sin hidratos`;
+    let t = `1 ración de ${f.name} = ${fmtNum(g, 0)} g`;
+    if (typeof it.rations === 'number' && it.rations > 0 && it.rations !== 1) t += ` · ${this.rationLabel(it.rations)} ≈ ${fmtNum(it.rations * g, 0)} g`;
+    return t;
   }
 
   protected rationsTotal(m: Meal): number {

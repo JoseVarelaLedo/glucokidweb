@@ -8,7 +8,10 @@
       <label for="q" class="sr-only">Buscar alimento</label>
       <input id="q" type="search" placeholder="Buscar alimento…" [ngModel]="query()" (ngModelChange)="query.set($event)" />
     </div>
-    <p class="muted small">Hidratos por 100 g de alimento (cocido o tal como se come). Toca uno para editarlo.</p>
+    <p class="muted small">
+      Gramos de alimento (cocido o tal como se come) que equivalen a <strong>una ración</strong> ({{ fmt(gramsPerRation()) }} g de hidratos).
+      Toca uno para editarlo.
+    </p>
 
     @for (g of groups(); track g.name) {
       <h3 class="group">{{ g.name }}</h3>
@@ -17,7 +20,11 @@
           <li>
             <button type="button" [class.on]="f.id === selectedId()" (click)="select(f)">
               <span>{{ f.name }}</span>
-              <strong>{{ fmt(f.carbsPer100g) }} g</strong>
+              @if (rationGrams(f); as rg) {
+                <strong>{{ fmt(rg, 1) }} g <small>/ ración</small></strong>
+              } @else {
+                <small>sin hidratos</small>
+              }
             </button>
           </li>
         }
@@ -45,6 +52,26 @@
             <option [value]="g">{{ g }}</option>
           }
         </select>
+      </div>
+
+      <div class="field">
+        <label for="frg">Gramos de este alimento por ración</label>
+        <input
+          id="frg"
+          type="number"
+          inputmode="decimal"
+          min="{{ gramsPerRation() }}"
+          step="1"
+          placeholder="Sin hidratos"
+          [ngModel]="rationGrams(f)"
+          (ngModelChange)="setRationGrams(f, $event)"
+        />
+        <p class="muted small">
+          Una ración son {{ fmt(gramsPerRation()) }} g de hidratos. Se muestra al registrar las comidas y se usa para calcular las raciones.
+          @if (f.carbsPer100g > 100) {
+            <span class="error">Imposible: una ración no puede pesar menos de {{ fmt(gramsPerRation()) }} g.</span>
+          }
+        </p>
       </div>
 
       <div class="field">

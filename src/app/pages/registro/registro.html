@@ -1,6 +1,6 @@
 <datalist id="foods-dl">
   @for (f of data.foods(); track f.id) {
-    <option [value]="f.name"></option>
+    <option [value]="f.name" [attr.label]="foodRationGrams(f) ? '1 ración = ' + fmt(foodRationGrams(f), 0) + ' g' : 'sin hidratos'"></option>
   }
 </datalist>
 <datalist id="activity-dl">
@@ -116,6 +116,9 @@
                         </select>
                         <button type="button" class="icon-btn danger" (click)="removeItem(m, it)" aria-label="Quitar alimento">×</button>
                       </div>
+                      @if (foodHint(it); as hint) {
+                        <p class="muted small food-hint">{{ hint }}</p>
+                      }
                       @if (it.rations == null && it.quantity) {
                         <p class="muted small">Cantidad anotada antes: {{ it.quantity }}. Elige las raciones para que cuente en la previsión.</p>
                       }
