@@ -4,6 +4,15 @@
   }
 </datalist>
 
+<div class="view-tabs" role="tablist" aria-label="Vista del registro">
+  @for (v of views; track v.key) {
+    <button type="button" role="tab" [attr.aria-selected]="view() === v.key" [class.on]="view() === v.key" (click)="view.set(v.key)">{{ v.label }}</button>
+  }
+</div>
+
+@if (view() !== 'dia') {
+  <div class="evo-wrap"><app-evolution [period]="period()" /></div>
+} @else {
 <div class="day-layout">
   <aside class="day-aside">
     <section class="card day-head">
@@ -248,3 +257,4 @@
     }
   </div>
 </div>
+}

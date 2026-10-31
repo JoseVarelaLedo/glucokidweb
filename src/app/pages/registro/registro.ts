@@ -14,6 +14,8 @@ import { Calendar } from '../../shared/calendar';
 import { FoodPicker } from '../../shared/food-picker';
 import { DayCurve } from '../../shared/day-curve';
 import { DaySnapshot } from '../../shared/day-snapshot';
+import { Evolution } from '../../shared/evolution';
+import { Period } from '../../core/evolution';
 import { ReadingEditor } from '../../shared/reading-editor';
 
 const ACTIVITY_SUGGESTIONS = [
@@ -30,7 +32,7 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot],
+  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
@@ -45,6 +47,18 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   protected readonly loadError = signal('');
   protected readonly calendarOpen = signal(false);
   protected readonly curveOpen = signal(false);
+  /** Vista: el día o la evolución por semanas, meses o año. */
+  protected readonly view = signal<'dia' | Period>('dia');
+  protected readonly views: ReadonlyArray<{ key: 'dia' | Period; label: string }> = [
+    { key: 'dia', label: 'Día' },
+    { key: 'semana', label: 'Semana' },
+    { key: 'mes', label: 'Mes' },
+    { key: 'anio', label: 'Año' },
+  ];
+  protected period(): Period {
+    const v = this.view();
+    return v === 'dia' ? 'semana' : v;
+  }
   /** Fecha de un día cerrado que un administrador ha reabierto para corregirlo (solo mientras se está en él). */
   private readonly reopened = signal('');
   protected readonly marks = signal<Record<string, DayMark>>({});

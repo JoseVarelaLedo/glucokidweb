@@ -8,6 +8,54 @@
       <label for="q" class="sr-only">Buscar alimento</label>
       <input id="q" type="search" placeholder="Buscar alimento…" [ngModel]="query()" (ngModelChange)="query.set($event)" />
     </div>
+    <details class="io-box">
+      <summary>Importar o exportar (JSON)</summary>
+      <div class="io-actions">
+        <button type="button" class="btn small" (click)="exportFoods()">Exportar alimentos</button>
+        <label class="btn small ghost file-btn" for="food-file">Importar archivo…</label>
+        <input id="food-file" class="sr-only" type="file" accept="application/json,.json" (change)="onFile($event)" />
+      </div>
+      <p class="muted small">
+        El archivo lleva, de cada alimento: nombre, grupo, gramos por ración e hidratos por 100 g. Para importar basta con uno de
+        los dos últimos datos.
+      </p>
+      @if (ioMsg()) {
+        <p class="notice ok" role="status">{{ ioMsg() }}</p>
+      }
+      @if (preview(); as p) {
+        <div class="io-preview" role="region" aria-label="Vista previa de la importación">
+          <strong>{{ importName() }}</strong>
+          @if (p.items.length) {
+            <p>
+              {{ p.counts.nuevo }} nuevos · {{ p.counts.actualiza }} se actualizarán · {{ p.counts.igual }} sin cambios
+            </p>
+            <fieldset class="io-mode">
+              <legend class="sr-only">Cómo importar</legend>
+              <label><input type="radio" name="imode" [checked]="importMode() === 'mezclar'" (change)="importMode.set('mezclar')" /> Añadir y actualizar (conserva el resto)</label>
+              <label><input type="radio" name="imode" [checked]="importMode() === 'reemplazar'" (change)="importMode.set('reemplazar')" /> Reemplazar todo el catálogo</label>
+            </fieldset>
+          }
+          @for (w of p.warnings; track $index) {
+            <p class="muted small">⚠ {{ w }}</p>
+          }
+          @if (p.errors.length) {
+            <p class="error small"><strong>{{ p.errors.length }} {{ p.errors.length === 1 ? 'entrada descartada' : 'entradas descartadas' }}:</strong></p>
+            <ul class="error small">
+              @for (e of p.errors; track $index) {
+                <li>{{ e }}</li>
+              }
+            </ul>
+          }
+          <div class="io-actions">
+            @if (p.items.length) {
+              <button type="button" class="btn small primary" (click)="applyImport()">Importar {{ p.items.length }} alimentos</button>
+            }
+            <button type="button" class="btn small ghost" (click)="cancelImport()">Cancelar</button>
+          </div>
+        </div>
+      }
+    </details>
+
     <p class="muted small">
       Gramos de alimento (cocido o tal como se come) que equivalen a <strong>una ración</strong> ({{ fmt(gramsPerRation()) }} g de hidratos).
       Toca uno para editarlo.

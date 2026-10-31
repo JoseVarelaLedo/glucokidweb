@@ -4,7 +4,8 @@ import { AutoSave } from '../../core/autosave';
 import { DataService } from '../../core/data.service';
 import { FOOD_GROUPS } from '../../core/defaults';
 import { Food } from '../../core/models';
-import { fmtNum, round, uid } from '../../core/util';
+import { ImportPreview, MAX_FILE_BYTES, applyImport, foodsToJson, parseFoodsJson } from '../../core/foods-io';
+import { fmtNum, round, todayStr, uid } from '../../core/util';
 
 @Component({
   selector: 'app-alimentos',
@@ -20,6 +21,58 @@ export class Alimentos implements DoCheck, OnDestroy {
   protected readonly selectedId = signal('');
   /** Cantidad de referencia del control gradual (10–100 g). */
   protected readonly refGrams = signal(100);
+
+  /* ---------------- importar / exportar JSON ---------------- */
+  protected readonly preview = signal<ImportPreview | null>(null);
+  protected readonly importName = signal('');
+  protected readonly importMode = signal<'mezclar' | 'reemplazar'>('mezclar');
+  protected readonly ioMsg = signal('');
+
+  protected exportFoods(): void {
+    const json = foodsToJson(this.data.foods(), this.gramsPerRation());
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `glucokid-alimentos-${todayStr()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this.ioMsg.set(`Exportados ${this.data.foods().length} alimentos.`);
+  }
+
+  protected async onFile(ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // permite volver a elegir el mismo archivo
+    this.ioMsg.set('');
+    if (!file) return;
+    this.importName.set(file.name);
+    if (file.size > MAX_FILE_BYTES) {
+      this.preview.set({ items: [], errors: ['El archivo es demasiado grande (máximo 1 MB).'], warnings: [], counts: { nuevo: 0, actualiza: 0, igual: 0 } });
+      return;
+    }
+    this.preview.set(parseFoodsJson(await file.text(), this.data.foods(), this.gramsPerRation()));
+  }
+
+  protected applyImport(): void {
+    const p = this.preview();
+    if (!p || !p.items.length) return;
+    const mode = this.importMode();
+    if (mode === 'reemplazar' && !confirm(`Se sustituirá todo el catálogo (${this.data.foods().length} alimentos) por los ${p.items.length} del archivo. ¿Continuar?`)) return;
+    this.data.foods.set(applyImport(this.data.foods(), p, mode));
+    this.ioMsg.set(
+      mode === 'reemplazar'
+        ? `Catálogo sustituido: ${p.items.length} alimentos.`
+        : `Importado: ${p.counts.nuevo} nuevos y ${p.counts.actualiza} actualizados.`,
+    );
+    this.selectedId.set('');
+    this.preview.set(null);
+  }
+
+  protected cancelImport(): void {
+    this.preview.set(null);
+  }
 
   protected readonly sel = computed<Food | undefined>(() => this.data.foods().find((f) => f.id === this.selectedId()));
 

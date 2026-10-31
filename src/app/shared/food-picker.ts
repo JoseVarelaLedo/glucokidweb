@@ -24,6 +24,39 @@ type Row = { key: string; kind: 'group'; label: string } | { key: string; kind: 
 @Component({
   selector: 'app-food-picker',
   template: `
+    @if (touch()) {
+      <select
+        class="fp-native"
+        [attr.id]="inputId() || null"
+        [attr.aria-label]="inputId() ? null : ariaLabel()"
+        (change)="onNative($any($event.target).value)"
+      >
+        <option value="" [selected]="!nativeValue()">{{ placeholder() }}</option>
+        @for (g of nativeGroups(); track g.name) {
+          <optgroup [label]="g.name">
+            @for (f of g.foods; track f.id) {
+              <option [value]="strict() ? f.id : f.name" [selected]="nativeValue() === (strict() ? f.id : f.name)">{{ f.name }} · {{ hint(f) }}</option>
+            }
+          </optgroup>
+        }
+        @if (!strict()) {
+          <option value="__other" [selected]="nativeValue() === '__other'">Otro alimento (escribir)…</option>
+        }
+      </select>
+      @if (isOther()) {
+        <input
+          #other
+          type="text"
+          class="fp-other"
+          autocomplete="off"
+          autocapitalize="sentences"
+          placeholder="Nombre del alimento"
+          aria-label="Nombre del alimento"
+          [value]="value()"
+          (input)="onOther($any($event.target).value)"
+        />
+      }
+    } @else {
     <input
       #box
       type="text"
@@ -84,12 +117,22 @@ type Row = { key: string; kind: 'group'; label: string } | { key: string; kind: 
         }
       </ul>
     }
+    }
   `,
   styles: [
     `
       :host {
         display: block;
         min-width: 0;
+      }
+      .fp-native {
+        width: 100%;
+        min-width: 0;
+        text-overflow: ellipsis;
+      }
+      .fp-other {
+        width: 100%;
+        margin-top: 6px;
       }
       .fp-list {
         position: fixed;
@@ -154,7 +197,56 @@ export class FoodPicker implements OnDestroy {
   readonly value = model<string>('');
 
   protected readonly uid = `fp${nextId++}`;
-  private readonly box = viewChild.required<ElementRef<HTMLInputElement>>('box');
+  private readonly boxRef = viewChild<ElementRef<HTMLInputElement>>('box');
+  private readonly otherRef = viewChild<ElementRef<HTMLInputElement>>('other');
+  private get box(): { nativeElement: HTMLInputElement } {
+    return this.boxRef() ?? { nativeElement: document.createElement('input') };
+  }
+
+  /**
+   * En móviles y tabletas (puntero táctil) se usa el selector nativo del sistema, que es lo más cómodo y fiable
+   * (rueda en iOS, lista a pantalla completa en Android). En ordenador, el desplegable con búsqueda.
+   */
+  protected readonly touch = signal(
+    typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches,
+  );
+  private readonly forcedOther = signal(false);
+  /** En el selector nativo: «Otro alimento» (nombre libre) si se ha elegido, o si el valor no está en el catálogo. */
+  protected readonly isOther = computed(() => {
+    if (this.strict()) return false;
+    if (this.forcedOther()) return true;
+    const v = this.value().trim();
+    return v !== '' && !this.foods().some((f) => norm(f.name) === norm(v));
+  });
+  protected readonly nativeValue = computed(() => {
+    if (this.isOther()) return '__other';
+    const v = this.value();
+    if (this.strict()) return this.foods().some((f) => f.id === v) ? v : '';
+    return this.foods().find((f) => norm(f.name) === norm(v))?.name ?? '';
+  });
+  protected readonly nativeGroups = computed(() => {
+    const by = new Map<string, Food[]>();
+    for (const f of this.foods()) by.set(f.group, [...(by.get(f.group) ?? []), f]);
+    return [...by.entries()]
+      .sort((a, b) => this.groupOrder(a[0]) - this.groupOrder(b[0]))
+      .map(([name, foods]) => ({ name, foods: [...foods].sort((a, b) => a.name.localeCompare(b.name, 'es')) }));
+  });
+
+  protected onNative(v: string): void {
+    if (v === '__other') {
+      this.forcedOther.set(true);
+      if (this.foods().some((f) => norm(f.name) === norm(this.value()))) this.value.set('');
+      queueMicrotask(() => this.otherRef()?.nativeElement.focus());
+      return;
+    }
+    this.forcedOther.set(false);
+    this.value.set(v);
+  }
+
+  protected onOther(v: string): void {
+    this.forcedOther.set(true); // así el campo no desaparece si lo escrito coincide con un alimento
+    this.value.set(v);
+  }
 
   protected readonly text = signal('');
   private readonly filter = signal('');
@@ -260,7 +352,7 @@ export class FoodPicker implements OnDestroy {
   /** Coloca la lista junto al campo: debajo si cabe y, si no, encima. */
   private place(): void {
     if (!this.isOpen()) return;
-    const r = this.box().nativeElement.getBoundingClientRect();
+    const r = this.box.nativeElement.getBoundingClientRect();
     const vh = window.visualViewport?.height ?? window.innerHeight;
     const below = vh - r.bottom - 12;
     const above = r.top - 12;
@@ -274,7 +366,7 @@ export class FoodPicker implements OnDestroy {
     } else {
       this.pos.set({ left, width, top: null, bottom: window.innerHeight - r.top + 4, maxH: Math.max(120, Math.min(wanted, above)) });
     }
-    const el = this.box().nativeElement;
+    const el = this.box.nativeElement;
     if (r.bottom < 0 || r.top > vh) el.blur(); // el campo salió de la pantalla al hacer scroll
   }
 
@@ -339,7 +431,7 @@ export class FoodPicker implements OnDestroy {
   protected pick(f: Food, ev: Event): void {
     ev.preventDefault(); // mantiene el foco: así no se cierra la lista antes de elegir
     this.choose(f);
-    this.box().nativeElement.blur();
+    this.box.nativeElement.blur();
   }
 
   private choose(f: Food): void {
