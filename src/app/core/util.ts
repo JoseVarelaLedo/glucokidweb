@@ -67,3 +67,14 @@ export function slugify(s: string): string {
       .slice(0, 60) || 'documento'
   );
 }
+
+/**
+ * Horas de margen tras la medianoche durante las que el día anterior todavía se puede completar
+ * (p. ej. la «medición post cena» suele hacerse pasada la medianoche). Pon 0 para cerrar justo a las 00:00.
+ */
+export const CLOSE_GRACE_HOURS = 3;
+
+/** ¿Es un día pasado ya cerrado (solo lectura)? Los días de hoy y futuros siempre se pueden editar. */
+export function isClosedDay(date: string, now: Date = new Date()): boolean {
+  return date < dateToStr(new Date(now.getTime() - CLOSE_GRACE_HOURS * 3600 * 1000));
+}

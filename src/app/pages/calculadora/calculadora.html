@@ -19,16 +19,14 @@
     <div class="card calc-row">
       <div class="field">
         <label [attr.for]="'f-' + r.id">Alimento</label>
-        <select [id]="'f-' + r.id" [(ngModel)]="r.foodId">
-          <option value="">Elegir…</option>
-          @for (g of groups(); track g.name) {
-            <optgroup [label]="g.name">
-              @for (f of g.foods; track f.id) {
-                <option [value]="f.id">{{ f.name }}</option>
-              }
-            </optgroup>
-          }
-        </select>
+        <app-food-picker
+          [inputId]="'f-' + r.id"
+          [foods]="data.foods()"
+          [gramsPerRation]="data.settings().gramsPerRation || 10"
+          [strict]="true"
+          placeholder="Buscar alimento…"
+          [(value)]="r.foodId"
+        />
       </div>
       <div class="field">
         <label [attr.for]="'g-' + r.id">Peso cocido (g)</label>

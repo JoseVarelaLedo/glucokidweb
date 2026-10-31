@@ -1499,3 +1499,83 @@ input[type='range'] {
     gap: 8px;
   }
 }
+
+/* ---------------- día cerrado (solo lectura) ---------------- */
+.snap-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  background: var(--surface-2);
+  p {
+    margin: 2px 0 0;
+  }
+}
+.snap-meal {
+  margin-bottom: 12px;
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
+    margin-bottom: 8px;
+  }
+}
+.snap-lines {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  > div {
+    display: grid;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  dt {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  dd {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+}
+.snap-reading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.snap-arrow {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.snap-items {
+  width: 100%;
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.snap-extra {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent-soft);
+  background: var(--surface-2);
+  border-radius: 0 10px 10px 0;
+  display: grid;
+  gap: 4px;
+  p {
+    margin: 0;
+  }
+}
+.snap-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}

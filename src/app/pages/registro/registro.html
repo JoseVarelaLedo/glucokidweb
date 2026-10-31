@@ -1,8 +1,3 @@
-<datalist id="foods-dl">
-  @for (f of data.foods(); track f.id) {
-    <option [value]="f.name" [attr.label]="foodRationGrams(f) ? '1 ración = ' + fmt(foodRationGrams(f), 0) + ' g' : 'sin hidratos'"></option>
-  }
-</datalist>
 <datalist id="activity-dl">
   @for (a of activitySuggestions; track a) {
     <option [value]="a"></option>
@@ -21,7 +16,7 @@
         aria-label="Abrir o cerrar el calendario"
       >
         <strong>{{ dateLabel() }}</strong>
-        <span class="muted">{{ isToday() ? 'Hoy' : 'Día pasado o futuro' }} · calendario ▾</span>
+        <span class="muted">{{ isToday() ? 'Hoy' : isClosedDay_() ? 'Día cerrado' : 'Día futuro o reciente' }} · calendario ▾</span>
       </button>
       <button type="button" class="icon-btn" (click)="shift(1)" aria-label="Día siguiente">›</button>
     </section>
@@ -46,6 +41,18 @@
     }
 
     @if (day; as d) {
+     @if (locked()) {
+      <app-day-snapshot [day]="d" [gramsPerRation]="gramsPerRation()" [canUnlock]="canReopen()" (unlock)="reopen()" />
+     } @else {
+      @if (isClosedDay_()) {
+        <section class="card snap-banner" role="status">
+          <div>
+            <strong>Estás editando un día cerrado</strong>
+            <p class="muted small">Los cambios se guardan como siempre. Cuando termines, vuelve a bloquearlo.</p>
+          </div>
+          <button type="button" class="btn small" (click)="relock()">Volver a bloquear</button>
+        </section>
+      }
       <div class="meals">
         @for (m of d.meals; track m.injectionId) {
           <article class="block">
@@ -107,7 +114,7 @@
                     </div>
                     @for (it of m.items; track it.id) {
                       <div class="item-row">
-                        <input type="text" list="foods-dl" placeholder="Alimento" aria-label="Alimento" [(ngModel)]="it.name" />
+                        <app-food-picker [foods]="data.foods()" [gramsPerRation]="gramsPerRation()" [(value)]="it.name" />
                         <select aria-label="Raciones" [ngModel]="it.rations ?? null" (ngModelChange)="it.rations = $event">
                           <option [ngValue]="null">Raciones…</option>
                           @for (n of rationOptions(it); track n) {
@@ -237,6 +244,7 @@
           <app-day-curve [day]="d" />
         }
       </section>
+     }
     }
   </div>
 </div>

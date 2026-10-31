@@ -6,12 +6,13 @@ import { DataService } from '../../core/data.service';
 import { CalcLine, CalcResult, carbsFor, computeDose } from '../../core/dose';
 import { planTotal } from '../../core/defaults';
 import { Food } from '../../core/models';
+import { FoodPicker } from '../../shared/food-picker';
 import { dayEvents, iobAt, correctionUnits, toMin } from '../../core/predict';
 import { fmtNum, nowTime, todayStr } from '../../core/util';
 
 @Component({
   selector: 'app-calculadora',
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, FoodPicker],
   templateUrl: './calculadora.html',
 })
 export class Calculadora implements OnInit {

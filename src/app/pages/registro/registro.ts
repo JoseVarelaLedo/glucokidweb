@@ -6,11 +6,14 @@ import { DataService } from '../../core/data.service';
 import { dayMark } from '../../core/glucose';
 import { LayoutService } from '../../core/layout.service';
 import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan } from '../../core/models';
-import { addDays, canon, fmtNum, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
+import { addDays, canon, fmtNum, isClosedDay, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
+import { AuthService } from '../../core/auth.service';
 import { emptyReading, planTotal } from '../../core/defaults';
 import { findFood } from '../../core/predict';
 import { Calendar } from '../../shared/calendar';
+import { FoodPicker } from '../../shared/food-picker';
 import { DayCurve } from '../../shared/day-curve';
+import { DaySnapshot } from '../../shared/day-snapshot';
 import { ReadingEditor } from '../../shared/reading-editor';
 
 const ACTIVITY_SUGGESTIONS = [
@@ -27,13 +30,14 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, Calendar, ReadingEditor, DayCurve],
+  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
   protected readonly data = inject(DataService);
   protected readonly layout = inject(LayoutService);
   private readonly alerts = inject(AlertsService);
+  private readonly auth = inject(AuthService);
 
   protected readonly date = signal(todayStr());
   protected day: DayRecord | null = null;
@@ -41,6 +45,8 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   protected readonly loadError = signal('');
   protected readonly calendarOpen = signal(false);
   protected readonly curveOpen = signal(false);
+  /** Fecha de un día cerrado que un administrador ha reabierto para corregirlo (solo mientras se está en él). */
+  private readonly reopened = signal('');
   protected readonly marks = signal<Record<string, DayMark>>({});
   protected readonly openIds = signal<ReadonlySet<string>>(new Set());
   protected readonly activitySuggestions = ACTIVITY_SUGGESTIONS;
@@ -90,6 +96,7 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
     const my = ++this.seq;
     await this.auto.flush();
     this.date.set(date);
+    if (this.reopened() !== date) this.reopened.set('');
     this.loading.set(true);
     this.loadError.set('');
     try {
@@ -135,6 +142,29 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   protected onPick(date: string): void {
     this.calendarOpen.set(false);
     void this.goTo(date);
+  }
+
+  /** Los días pasados se cierran: solo lectura (salvo que un administrador los reabra). */
+  protected locked(): boolean {
+    return isClosedDay(this.date()) && this.reopened() !== this.date();
+  }
+
+  /** Corregir un día cerrado está reservado a administradores (y al modo local, de un solo usuario). */
+  protected canReopen(): boolean {
+    return this.auth.isAdmin() || this.auth.status() === 'local';
+  }
+
+  protected reopen(): void {
+    if (this.canReopen()) this.reopened.set(this.date());
+  }
+
+  protected relock(): void {
+    void this.auto.flush();
+    this.reopened.set('');
+  }
+
+  protected isClosedDay_(): boolean {
+    return isClosedDay(this.date());
   }
 
   protected isToday(): boolean {
