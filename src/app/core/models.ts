@@ -111,6 +111,8 @@ export interface Settings {
   /** Glucemia objetivo para correcciones. */
   targetGlucose?: number;
   model?: PredictModel;
+  /** Fechas (YYYY-MM-DD) en las que se cambió el sensor del monitor, para estudiar su fiabilidad según el día de vida. */
+  sensors?: string[];
 }
 
 export interface Food {

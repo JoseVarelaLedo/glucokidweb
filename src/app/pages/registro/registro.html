@@ -10,7 +10,9 @@
   }
 </div>
 
-@if (view() !== 'dia') {
+@if (view() === 'monitor') {
+  <div class="evo-wrap"><app-monitor-panel /></div>
+} @else if (view() !== 'dia') {
   <div class="evo-wrap"><app-evolution [period]="period()" /></div>
 } @else {
 <div class="day-layout">
@@ -25,7 +27,7 @@
         aria-label="Abrir o cerrar el calendario"
       >
         <strong>{{ dateLabel() }}</strong>
-        <span class="muted">{{ isToday() ? 'Hoy' : isClosedDay_() ? 'Día cerrado' : 'Día futuro o reciente' }} · calendario ▾</span>
+        <span class="muted">{{ isToday() ? 'Hoy' : isClosedDay_() ? 'Día cerrado' : 'Día futuro o reciente' }}@if (sensorDay(); as sd) { · sensor día {{ sd }} } · calendario ▾</span>
       </button>
       <button type="button" class="icon-btn" (click)="shift(1)" aria-label="Día siguiente">›</button>
     </section>
@@ -89,7 +91,7 @@
               @if (isOpen(m)) {
                 <div class="meal-body">
                   <h4>{{ m.kind === 'lenta' ? 'Administración' : 'Antes de comer' }} <span class="req-note">* obligatorio</span></h4>
-                  <app-reading-editor [reading]="m.before" [required]="true" />
+                  <app-reading-editor [reading]="m.before" [required]="true" [hintDate]="date()" />
                   <div class="field" [class.missing]="m.before.units === null">
                     <label [attr.for]="'u-' + m.injectionId">Unidades a administrar <span class="req">*</span></label>
                     <select [id]="'u-' + m.injectionId" [(ngModel)]="m.before.units">
@@ -147,7 +149,7 @@
                     <button type="button" class="btn ghost" (click)="addItem(m)">+ Añadir alimento</button>
 
                     <h4>Al terminar de comer</h4>
-                    <app-reading-editor [reading]="m.after" />
+                    <app-reading-editor [reading]="m.after" [hintDate]="date()" />
                   }
                 </div>
               }
@@ -165,7 +167,7 @@
                     <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
                     <button type="button" role="radio" [class.on]="x.source === 'capilar'" [attr.aria-checked]="x.source === 'capilar'" (click)="x.source = 'capilar'">Capilar</button>
                   </div>
-                  <app-reading-editor [reading]="x" />
+                  <app-reading-editor [reading]="x" [hintDate]="x.source === 'capilar' ? '' : date()" />
                   <div class="field">
                     <label [attr.for]="'xr-' + x.id">Raciones adicionales <small>(si ha tomado algo)</small></label>
                     <input [id]="'xr-' + x.id" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" [(ngModel)]="x.extraRations" />
@@ -219,10 +221,10 @@
             </div>
 
             <h4>Antes de empezar</h4>
-            <app-reading-editor [reading]="a.before" [showTime]="false" />
+            <app-reading-editor [reading]="a.before" [showTime]="false" [hintDate]="date()" />
 
             <h4>Al terminar</h4>
-            <app-reading-editor [reading]="a.after" [showTime]="false" />
+            <app-reading-editor [reading]="a.after" [showTime]="false" [hintDate]="date()" />
 
             <label class="check">
               <input type="checkbox" [(ngModel)]="a.supplemented" />

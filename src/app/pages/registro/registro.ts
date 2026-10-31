@@ -15,6 +15,8 @@ import { FoodPicker } from '../../shared/food-picker';
 import { DayCurve } from '../../shared/day-curve';
 import { DaySnapshot } from '../../shared/day-snapshot';
 import { Evolution } from '../../shared/evolution';
+import { MonitorPanel } from '../../shared/monitor-panel';
+import { sensorDayOf } from '../../core/calibration';
 import { Period } from '../../core/evolution';
 import { ReadingEditor } from '../../shared/reading-editor';
 
@@ -32,7 +34,7 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution],
+  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
@@ -48,16 +50,22 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   protected readonly calendarOpen = signal(false);
   protected readonly curveOpen = signal(false);
   /** Vista: el día o la evolución por semanas, meses o año. */
-  protected readonly view = signal<'dia' | Period>('dia');
-  protected readonly views: ReadonlyArray<{ key: 'dia' | Period; label: string }> = [
+  protected readonly view = signal<'dia' | Period | 'monitor'>('dia');
+  protected readonly views: ReadonlyArray<{ key: 'dia' | Period | 'monitor'; label: string }> = [
     { key: 'dia', label: 'Día' },
     { key: 'semana', label: 'Semana' },
     { key: 'mes', label: 'Mes' },
     { key: 'anio', label: 'Año' },
+    { key: 'monitor', label: 'Monitor' },
   ];
   protected period(): Period {
     const v = this.view();
-    return v === 'dia' ? 'semana' : v;
+    return v === 'semana' || v === 'mes' || v === 'anio' ? v : 'semana';
+  }
+
+  /** Día de vida del sensor del monitor en la fecha mostrada (si se anotó el cambio de sensor). */
+  protected sensorDay(): number | null {
+    return sensorDayOf(this.date(), this.data.settings().sensors);
   }
   /** Fecha de un día cerrado que un administrador ha reabierto para corregirlo (solo mientras se está en él). */
   private readonly reopened = signal('');
