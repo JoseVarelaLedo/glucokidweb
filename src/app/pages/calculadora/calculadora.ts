@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { CalcRow, CalcService } from '../../core/calc.service';
 import { DataService } from '../../core/data.service';
 import { CalcLine, CalcResult, carbsFor, computeDose } from '../../core/dose';
+import { planTotal } from '../../core/defaults';
 import { Food } from '../../core/models';
 import { dayEvents, iobAt, correctionUnits, toMin } from '../../core/predict';
 import { fmtNum, nowTime, todayStr } from '../../core/util';
@@ -119,13 +120,28 @@ export class Calculadora implements OnInit {
     this.calc.snapshot = this.signature();
   }
 
+  /** Hidratos de un alimento → raciones, redondeadas a media ración (mínimo media si lleva algo de hidratos). */
+  private toRations(carbsGrams: number): number {
+    const gpr = this.data.settings().gramsPerRation || 10;
+    if (!(carbsGrams > 0)) return 0;
+    return Math.max(0.5, Math.round((carbsGrams / gpr) * 2) / 2);
+  }
+
+  /** Raciones previstas para la comida elegida como destino (Ajustes), o null. */
+  protected targetPlan(): { name: string; harinas: number; verduras: number; fruta: number; total: number } | null {
+    const inj = this.rapidas().find((i) => i.id === this.targetId);
+    const total = planTotal(inj?.plan);
+    if (!inj || total <= 0) return null;
+    return { name: inj.name, harinas: inj.plan?.harinas ?? 0, verduras: inj.plan?.verduras ?? 0, fruta: inj.plan?.fruta ?? 0, total };
+  }
+
   protected async transfer(res: CalcResult): Promise<void> {
     if (!this.targetId) return;
     const ok = await this.data.applyCalculation(
       todayStr(),
       this.targetId,
       res.dose.roundedUnits,
-      res.lines.map((l) => ({ name: l.name, quantity: `${fmtNum(l.grams)} g` })),
+      res.lines.map((l) => ({ name: l.name, quantity: `${fmtNum(l.grams)} g`, rations: this.toRations(l.carbs) })),
     );
     const name = this.rapidas().find((i) => i.id === this.targetId)?.name ?? 'la comida';
     this.message.set(

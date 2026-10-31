@@ -19,7 +19,7 @@
  *
  * No es un dispositivo médico ni sustituye a la pauta del equipo de endocrinología.
  */
-import { FOOD_GROUPS, makeDefaultModel } from './defaults';
+import { FOOD_GROUPS, makeDefaultModel, planTotal } from './defaults';
 import { classify } from './glucose';
 import { Arrow, DayRecord, Food, Meal, PredictModel, Reading, Settings } from './models';
 
@@ -84,33 +84,48 @@ const FAT_GROUP = FOOD_GROUPS[5]; // 'Proteínas y grasas (sin hidratos)'
 
 export interface MealCarbs {
   grams: number; // hidratos estimados
+  /** Raciones anotadas directamente en los alimentos (las que llevan raciones, no las antiguas en gramos). */
+  rations: number;
   unknown: string[]; // alimentos de los que no se pudo estimar nada
   hasFat: boolean; // lleva proteínas/grasas (absorción más lenta)
   matched: number;
 }
 
-export function mealCarbs(meal: Meal, foods: Food[]): MealCarbs {
+/**
+ * Hidratos de una comida. Si el alimento lleva RACIONES, se usan directamente (raciones × g de hidratos por ración:
+ * no hace falta que el alimento esté en el catálogo). Los registros antiguos, con cantidad en texto («200 g»),
+ * se siguen estimando con el catálogo de alimentos.
+ */
+export function mealCarbs(meal: Meal, foods: Food[], gPerRation = 10): MealCarbs {
   let grams = 0;
+  let rations = 0;
   let matched = 0;
   let hasFat = false;
   const unknown: string[] = [];
   for (const it of meal.items) {
-    if (!it.name?.trim()) continue;
-    const f = findFood(it.name, foods);
-    if (!f) {
-      unknown.push(it.name.trim());
+    const name = it.name?.trim();
+    if (!name) continue;
+    const f = findFood(name, foods);
+    if (f?.group === FAT_GROUP) hasFat = true;
+    if (typeof it.rations === 'number' && Number.isFinite(it.rations) && it.rations >= 0) {
+      rations += it.rations;
+      grams += it.rations * gPerRation;
+      matched++;
       continue;
     }
-    if (f.group === FAT_GROUP) hasFat = true;
+    if (!f) {
+      unknown.push(`${name} (sin raciones)`);
+      continue;
+    }
     const g = parseGrams(it.quantity);
     if (g === null) {
-      if (f.carbsPer100g > 0) unknown.push(`${it.name.trim()} (sin cantidad en g/ml)`);
+      if (f.carbsPer100g > 0) unknown.push(`${name} (sin raciones)`);
       continue;
     }
     matched++;
     grams += (f.carbsPer100g * g) / 100;
   }
-  return { grams, unknown, hasFat, matched };
+  return { grams, rations, unknown, hasFat, matched };
 }
 
 /* ------------------------------------------------------------------ */
@@ -193,7 +208,7 @@ export function dayEvents(day: DayRecord, s: Settings, foods: Food[]): DayEvents
       else out.insulin.push({ t: tIns, units, label: m.name });
     }
     if (items.length) {
-      const c = mealCarbs(m, foods);
+      const c = mealCarbs(m, foods, gPerRation);
       const tFood = toMin(m.foodTime) ?? tIns;
       if (c.unknown.length) {
         out.issues.push({ mealId: m.injectionId, text: `${m.name}: no se han podido estimar los hidratos de ${c.unknown.join(', ')}.` });
@@ -480,7 +495,7 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
     }
 
     // R4 · dosis registrada frente a la calculada por ratio (+ corrección por glucemia alta)
-    const carbEstimate = mealCarbs(m, foods);
+    const carbEstimate = mealCarbs(m, foods, gPerRation);
     if (carbEstimate.grams > 0 && (m.before.units ?? 0) > 0) {
       const byRatio = (carbEstimate.grams / gPerRation) * uPerRation;
       const corr = g0 > target ? Math.round((g0 - target) / isf) : 0;
@@ -492,6 +507,21 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
           level: 'info',
           code: 'dosis-distinta',
           text: `Dosis registrada ${fmt(given)} U, ${dirTxt} a la que salen los datos (${fmt(byRatio)} U por la ratio${corr ? ` + ${corr} U de corrección` : ''} ≈ ${fmt(expected)} U). Puede ser intencionado; si no, revisa las cantidades.`,
+        });
+      }
+    }
+
+    // R4b · raciones anotadas frente a las previstas para esta comida (Ajustes)
+    const planned = planTotal(s.injections.find((i) => i.id === m.injectionId)?.plan);
+    if (planned > 0 && carbEstimate.matched > 0) {
+      const diff = carbEstimate.rations - planned;
+      if (Math.abs(diff) >= 1) {
+        const units = Math.abs(diff) * uPerRation;
+        const effect = isf > 0 ? ` (≈ ${Math.round(units * isf)} mg/dL)` : '';
+        recs.push({
+          level: 'info',
+          code: 'raciones-previstas',
+          text: `Raciones anotadas: ${fmt(carbEstimate.rations)}, ${fmt(Math.abs(diff))} ${diff < 0 ? 'menos' : 'más'} que las previstas (${fmt(planned)}). Esa diferencia equivale a ≈ ${fmt(units)} U${effect}: si la glucemia se desvió, puede explicarlo.`,
         });
       }
     }
@@ -673,4 +703,3 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
-

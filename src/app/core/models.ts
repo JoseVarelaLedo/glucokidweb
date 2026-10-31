@@ -17,7 +17,18 @@ export interface MealReading extends Reading {
 export interface FoodEntry {
   id: string;
   name: string;
+  /** Texto libre de cantidad (versión anterior, p. ej. «200 g»). Solo se usa si `rations` no está informado. */
   quantity: string;
+  /** Raciones de hidratos de este alimento (en pasos de media ración). Es lo que usa el modelo predictivo. */
+  rations?: number | null;
+}
+
+/** Raciones previstas para una comida, por tipo (se configura en Ajustes). */
+export interface RationPlan {
+  /** Hidratos que no provienen de la fruta (cereales, pasta, pan, legumbres, patata…). */
+  harinas?: number | null;
+  verduras?: number | null;
+  fruta?: number | null;
 }
 
 export interface Meal {
@@ -68,6 +79,8 @@ export interface InjectionDef {
   maxUnits: number;
   /** Unidades que se proponen por defecto al registrar esta administración (se pueden cambiar en cada comida). */
   defaultUnits?: number | null;
+  /** Raciones previstas en esta comida (harinas, verduras, fruta); se muestran como leyenda en el registro. */
+  plan?: RationPlan;
   /** Comida opcional (p. ej. media mañana): no cuenta como "pendiente" si está vacía. */
   optional?: boolean;
 }

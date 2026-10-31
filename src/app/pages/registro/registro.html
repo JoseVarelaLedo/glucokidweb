@@ -89,6 +89,15 @@
 
                   @if (m.kind === 'rapida') {
                     <h4>Comida</h4>
+                    @if (plan(m); as p) {
+                      <p class="plan muted small">
+                        Raciones previstas:
+                        @if (p.harinas) { <span class="chip">Harinas {{ fmt(p.harinas) }}</span> }
+                        @if (p.verduras) { <span class="chip">Verduras {{ fmt(p.verduras) }}</span> }
+                        @if (p.fruta) { <span class="chip">Fruta {{ fmt(p.fruta) }}</span> }
+                        · total {{ fmt(p.total) }} (≈ {{ fmt(p.total * gramsPerRation(), 0) }} g de hidratos). Se cambia en Ajustes.
+                      </p>
+                    }
                     <div class="field">
                       <label [attr.for]="'ft-' + m.injectionId">Hora a la que va a comer</label>
                       <div class="inline">
@@ -99,9 +108,22 @@
                     @for (it of m.items; track it.id) {
                       <div class="item-row">
                         <input type="text" list="foods-dl" placeholder="Alimento" aria-label="Alimento" [(ngModel)]="it.name" />
-                        <input type="text" placeholder="Cantidad" aria-label="Cantidad" [(ngModel)]="it.quantity" />
+                        <select aria-label="Raciones" [ngModel]="it.rations ?? null" (ngModelChange)="it.rations = $event">
+                          <option [ngValue]="null">Raciones…</option>
+                          @for (n of rationOptions(it); track n) {
+                            <option [ngValue]="n">{{ rationLabel(n) }}</option>
+                          }
+                        </select>
                         <button type="button" class="icon-btn danger" (click)="removeItem(m, it)" aria-label="Quitar alimento">×</button>
                       </div>
+                      @if (it.rations == null && it.quantity) {
+                        <p class="muted small">Cantidad anotada antes: {{ it.quantity }}. Elige las raciones para que cuente en la previsión.</p>
+                      }
+                    }
+                    @if (m.items.length) {
+                      <p class="muted small">
+                        Anotado: <strong>{{ fmt(rationsTotal(m)) }}</strong> raciones (≈ {{ fmt(rationsTotal(m) * gramsPerRation(), 0) }} g de hidratos).
+                      </p>
                     }
                     <button type="button" class="btn ghost" (click)="addItem(m)">+ Añadir alimento</button>
 

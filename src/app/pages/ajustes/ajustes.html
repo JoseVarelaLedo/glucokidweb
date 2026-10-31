@@ -32,6 +32,37 @@
         </select>
         <p class="muted small">Se propone al anotar la glucemia; en cada comida se puede cambiar.</p>
       </div>
+      @if (inj.kind === 'rapida') {
+        <div class="field">
+          <label [attr.for]="'ph-' + inj.id">Raciones previstas · harinas</label>
+          <select [id]="'ph-' + inj.id" [ngModel]="planValue(inj, 'harinas')" (ngModelChange)="setPlan(inj, 'harinas', $event)">
+            <option [ngValue]="null">Sin previsión</option>
+            @for (n of planOptions; track n) {
+              <option [ngValue]="n">{{ fmt(n) }}</option>
+            }
+          </select>
+          <p class="muted small">Hidratos que no provienen de la fruta ni de la verdura: pan, pasta, arroz, legumbres, patata…</p>
+        </div>
+        <div class="field">
+          <label [attr.for]="'pv-' + inj.id">Raciones previstas · verduras</label>
+          <select [id]="'pv-' + inj.id" [ngModel]="planValue(inj, 'verduras')" (ngModelChange)="setPlan(inj, 'verduras', $event)">
+            <option [ngValue]="null">Sin previsión</option>
+            @for (n of planOptions; track n) {
+              <option [ngValue]="n">{{ fmt(n) }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label [attr.for]="'pf-' + inj.id">Raciones previstas · fruta</label>
+          <select [id]="'pf-' + inj.id" [ngModel]="planValue(inj, 'fruta')" (ngModelChange)="setPlan(inj, 'fruta', $event)">
+            <option [ngValue]="null">Sin previsión</option>
+            @for (n of planOptions; track n) {
+              <option [ngValue]="n">{{ fmt(n) }}</option>
+            }
+          </select>
+          <p class="muted small">Se muestran como leyenda en el registro de esta comida, antes de anotar los alimentos.</p>
+        </div>
+      }
       <label class="check" [attr.for]="'io-' + inj.id">
         <input [id]="'io-' + inj.id" type="checkbox" [(ngModel)]="inj.optional" />
         Comida opcional (no cuenta como pendiente)
@@ -42,6 +73,12 @@
         <button type="button" class="icon-btn danger" (click)="removeInjection(i)" [disabled]="data.settings().injections.length <= 1" aria-label="Quitar">×</button>
       </div>
     </div>
+  }
+  @if (dayPlan(); as dp) {
+    <p class="muted small">
+      Raciones previstas al día: <strong>{{ fmt(dp.rations) }}</strong> (≈ {{ fmt(dp.grams, 0) }} g de hidratos)
+      @if (carbReference(); as ref) { · referencia por calorías: ≈ {{ fmt(ref, 0) }} g }
+    </p>
   }
   <button type="button" class="btn ghost" (click)="addInjection()">+ Añadir administración</button>
 

@@ -125,7 +125,7 @@ export class DayCurve implements DoCheck {
       if (m.kind === 'lenta') lenta += m.before.units ?? 0;
       else {
         rapid += m.before.units ?? 0;
-        const c = mealCarbs(m, foods);
+        const c = mealCarbs(m, foods, this.gpr());
         carbs += c.grams;
         unknownFoods += c.unknown.length;
       }

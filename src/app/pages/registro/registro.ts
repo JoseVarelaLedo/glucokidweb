@@ -5,9 +5,9 @@ import { AutoSave } from '../../core/autosave';
 import { DataService } from '../../core/data.service';
 import { dayMark } from '../../core/glucose';
 import { LayoutService } from '../../core/layout.service';
-import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal } from '../../core/models';
+import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan } from '../../core/models';
 import { addDays, canon, fmtNum, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
-import { emptyReading } from '../../core/defaults';
+import { emptyReading, planTotal } from '../../core/defaults';
 import { Calendar } from '../../shared/calendar';
 import { DayCurve } from '../../shared/day-curve';
 import { ReadingEditor } from '../../shared/reading-editor';
@@ -258,7 +258,39 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   }
 
   protected addItem(m: Meal): void {
-    m.items.push({ id: uid(), name: '', quantity: '' });
+    m.items.push({ id: uid(), name: '', quantity: '', rations: null });
+  }
+
+  /** Texto corto de una cantidad de raciones (cabe en el móvil): «0 rac.», «½ rac.», «1 rac.», «1½ rac.»… */
+  protected rationLabel(n: number): string {
+    const whole = Math.floor(n);
+    const half = n - whole === 0.5;
+    if (!half && n !== whole) return `${fmtNum(n, 2)} rac.`;
+    return `${half ? (whole ? `${whole}½` : '½') : whole} rac.`;
+  }
+
+  private readonly rationBase = Array.from({ length: 25 }, (_, i) => i * 0.5); // 0 … 12 raciones
+
+  /** Opciones del selector de raciones (de media en media). Si el alimento trae otro valor, también se ofrece. */
+  protected rationOptions(it: FoodEntry): number[] {
+    const cur = it.rations;
+    if (typeof cur === 'number' && !this.rationBase.includes(cur)) return [...this.rationBase, cur].sort((a, b) => a - b);
+    return this.rationBase;
+  }
+
+  /** Raciones previstas para esta comida (Ajustes), o null si no se ha configurado nada. */
+  protected plan(m: Meal): (RationPlan & { total: number }) | null {
+    const p = this.data.settings().injections.find((i) => i.id === m.injectionId)?.plan;
+    const total = planTotal(p);
+    return p && total > 0 ? { ...p, total } : null;
+  }
+
+  protected rationsTotal(m: Meal): number {
+    return m.items.reduce((acc, it) => acc + (typeof it.rations === 'number' ? it.rations : 0), 0);
+  }
+
+  protected gramsPerRation(): number {
+    return this.data.settings().gramsPerRation || 10;
   }
 
   protected removeItem(m: Meal, it: FoodEntry): void {

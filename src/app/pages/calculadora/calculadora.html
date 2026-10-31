@@ -92,6 +92,15 @@
           }
         </select>
       </div>
+      @if (targetPlan(); as tp) {
+        <p class="muted small">
+          Raciones previstas para {{ tp.name.toLowerCase() }}:
+          @if (tp.harinas) { <span class="chip">Harinas {{ fmt(tp.harinas) }}</span> }
+          @if (tp.verduras) { <span class="chip">Verduras {{ fmt(tp.verduras) }}</span> }
+          @if (tp.fruta) { <span class="chip">Fruta {{ fmt(tp.fruta) }}</span> }
+          · total {{ fmt(tp.total) }}.
+        </p>
+      }
       <button type="button" class="btn" [disabled]="!targetId || stale()" (click)="transfer(res)">Añadir al registro</button>
     </div>
     @if (message()) {

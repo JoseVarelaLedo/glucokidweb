@@ -5,9 +5,9 @@ import { AuthService } from '../../core/auth.service';
 import { PushService } from '../../core/push.service';
 import { AutoSave } from '../../core/autosave';
 import { DataService } from '../../core/data.service';
-import { InjectionDef, Settings } from '../../core/models';
+import { InjectionDef, RationPlan, Settings } from '../../core/models';
 import { fmtNum, round, uid } from '../../core/util';
-import { makeDefaultModel } from '../../core/defaults';
+import { makeDefaultModel, planTotal } from '../../core/defaults';
 import { ISF_RULE, carbRatioHint, sensitivityFactor } from '../../core/predict';
 
 @Component({
@@ -47,7 +47,7 @@ export class Ajustes implements DoCheck, OnDestroy {
     const s = this.data.settings();
     return (
       s.injections.length > 0 &&
-      s.injections.every((i) => i.name.trim().length > 0 && i.maxUnits > 0 && (i.defaultUnits == null || (i.defaultUnits >= 0 && i.defaultUnits <= i.maxUnits))) &&
+      s.injections.every((i) => i.name.trim().length > 0 && i.maxUnits > 0 && (i.defaultUnits == null || (i.defaultUnits >= 0 && i.defaultUnits <= i.maxUnits)) && planTotal(i.plan) <= 100) &&
       s.gramsPerRation > 0 &&
       s.unitsPerRation >= 0 &&
       s.doseStep > 0
@@ -63,6 +63,29 @@ export class Ajustes implements DoCheck, OnDestroy {
     const cur = inj.defaultUnits;
     if (cur != null && cur > 0 && !out.includes(cur)) out.push(cur);
     return out.sort((a, b) => a - b);
+  }
+
+  /** Opciones para las raciones previstas: de media en media, hasta 20. */
+  protected readonly planOptions = Array.from({ length: 40 }, (_, i) => (i + 1) * 0.5);
+
+  protected planValue(inj: InjectionDef, k: keyof RationPlan): number | null {
+    return inj.plan?.[k] ?? null;
+  }
+
+  protected setPlan(inj: InjectionDef, k: keyof RationPlan, v: number | null): void {
+    inj.plan = { ...(inj.plan ?? {}), [k]: v };
+  }
+
+  /** Total de raciones previstas al día (solo comidas con insulina rápida) y gramos de hidratos que suponen. */
+  protected dayPlan(): { rations: number; grams: number } | null {
+    const s = this.data.settings();
+    const rations = s.injections.filter((i) => i.kind === 'rapida').reduce((acc, i) => acc + planTotal(i.plan), 0);
+    return rations > 0 ? { rations, grams: rations * (s.gramsPerRation || 10) } : null;
+  }
+
+  protected carbReference(): number | null {
+    const s = this.data.settings();
+    return s.dailyCalories && s.dailyCalories > 0 && s.carbPercent ? (s.dailyCalories * (s.carbPercent / 100)) / 4 : null;
   }
 
   protected addInjection(): void {

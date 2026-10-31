@@ -11,7 +11,7 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'queued' | 'error';
 @Injectable({ providedIn: 'root' })
 export class DataService {
   private readonly auth = inject(AuthService);
-  /** usuario cuyos datos se muestran (el propio, o cualquiera si eres administrador). */
+  /** Usuario cuyos datos se muestran (el propio, o cualquiera si eres administrador). */
   readonly viewUid = signal('');
   readonly viewingOther = computed(() => this.auth.isAdmin() && this.viewUid() !== '' && this.viewUid() !== this.auth.dataUid());
   readonly settings = signal<Settings>(makeDefaultSettings());
@@ -28,7 +28,7 @@ export class DataService {
     return this.initializing;
   }
 
-  /** sólo administradores: cambia a los datos de otro usuario (la seguridad real la imponen las reglas de Firestore). */
+  /** Solo administradores: cambia a los datos de otro usuario (la seguridad real la imponen las reglas de Firestore). */
   switchUser(uid: string): Promise<void> {
     if (!this.auth.isAdmin()) return Promise.resolve();
     this.ready.set(false);
@@ -55,7 +55,7 @@ export class DataService {
       const migrated = settings ? migrateSettings(cfg) : false;
       this.settings.set(cfg);
       this.foods.set(foods ?? makeDefaultFoods());
-      // primera vez (o ajustes antiguos migrados): dejamos escritos los valores para que todos los dispositivos compartan los mismos.
+      // Primera vez (o ajustes antiguos migrados): dejamos escritos los valores para que todos los dispositivos compartan los mismos.
       if (!settings || migrated) void this.saveSettings(this.settings());
       if (!foods) void this.saveFoods(this.foods());
       this.ready.set(true);
@@ -73,7 +73,7 @@ export class DataService {
   async getDay(date: string): Promise<DayRecord> {
     const stored = await this.store.loadDay(date);
     const day = stored ?? newDay(date, this.settings());
-    // defensa ante documentos antiguos o incompletos
+    // Defensa ante documentos antiguos o incompletos
     day.meals ??= [];
     day.extras ??= [];
     day.activities ??= [];
@@ -81,12 +81,12 @@ export class DataService {
     return syncDay(day, this.settings(), todayStr());
   }
 
-  /** rango de días ya guardados (sin crear los vacíos). */
+  /** Rango de días ya guardados (sin crear los vacíos). */
   getRange(from: string, to: string): Promise<DayRecord[]> {
     return this.store.loadRange(from, to);
   }
 
-  /** cambios en directo del día que edita otro cuidador. */
+  /** Cambios en directo del día que edita otro cuidador. */
   watchDay(date: string, cb: (d: DayRecord) => void): () => void {
     return this.store.watchDay(date, (d) => {
       delete (d as unknown as Record<string, unknown>)['updatedAt'];
@@ -150,13 +150,13 @@ export class DataService {
     date: string,
     injectionId: string,
     units: number,
-    items: Array<{ name: string; quantity: string }>,
+    items: Array<{ name: string; quantity: string; rations?: number | null }>,
   ): Promise<boolean> {
     const day = await this.getDay(date);
     const meal = day.meals.find((m) => m.injectionId === injectionId);
     if (!meal) return false;
     meal.before.units = units;
-    const entries: FoodEntry[] = items.map((i) => ({ id: uid(), name: i.name, quantity: i.quantity }));
+    const entries: FoodEntry[] = items.map((i) => ({ id: uid(), name: i.name, quantity: i.quantity, rations: i.rations ?? null }));
     meal.items.push(...entries);
     await this.saveDay(day);
     return true;

@@ -1,10 +1,15 @@
-import { DayRecord, Food, InjectionDef, Meal, PredictModel, Reading, Settings } from './models';
+import { DayRecord, Food, InjectionDef, Meal, PredictModel, RationPlan, Reading, Settings } from './models';
 
 export function emptyReading(): Reading {
   return { time: '', value: null, arrow: null };
 }
 
 export const SETTINGS_VERSION = 2;
+
+/** Total de raciones previstas de una comida (harinas + verduras + fruta). */
+export function planTotal(p?: RationPlan | null): number {
+  return (p?.harinas ?? 0) + (p?.verduras ?? 0) + (p?.fruta ?? 0);
+}
 
 export function makeDefaultModel(): PredictModel {
   return { diaMin: 300, peakMin: 75, carbMin: 180, carbMinFat: 240 };
