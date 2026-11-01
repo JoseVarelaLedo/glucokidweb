@@ -76,13 +76,14 @@ si tienes dudas, hazlo **privado**.
 - `core/predict.ts` modelo predictivo (insulina activa, absorción de hidratos a partir de raciones, desviaciones, patrones).
 - `core/evolution.ts` estadísticas y tendencia por semana, mes y año.
 - `core/calibration.ts` y `core/calibration.service.ts` fiabilidad del monitor frente a las glucemias capilares.
+- `core/libre-csv.ts` (lectura del CSV del monitor) y `core/libre-import.ts` (serie por día, unión sin duplicados, estadísticas); `shared/sensor-import.ts` es la pantalla de importación.
 - `core/foods-io.ts` importación y exportación del catálogo de alimentos en JSON.
 - `core/stores.ts` almacenamiento local y Firestore (`days/{fecha}`, `config/settings`, `config/foods`).
 - `core/util.ts` utilidades de fechas; aquí está `CLOSE_GRACE_HOURS` (margen de cierre de los días).
 - `shared/` componentes reutilizables: selector de alimentos (`food-picker`), instantánea de un día cerrado (`day-snapshot`),
   curva del día (`day-curve`, `glucose-chart`), evolución (`evolution`) y fiabilidad del monitor (`monitor-panel`, `monitor-hint`).
 - `pages/` registro, calculadora, alimentos, docs, usuarios, ajustes.
-- Guías: `COMPARTIR-REGISTROS.md` (varias cuentas para un niño), `NUEVO-SUJETO-MEDICION.md` (añadir un niño y cómo se identifica), `PUSH.md`, `GITHUB-NETLIFY.md`.
+- Guías: `COMPARTIR-NINO.md` (varias cuentas para un niño), `NUEVO-NINO.md` (añadir un niño y cómo se identifica), `PUSH.md`, `GITHUB-NETLIFY.md`, `MIGRACION.md`.
 - `scripts/write-config.mjs` genera los ficheros de configuración propios desde variables de entorno.
 - `netlify/functions/` función que envía los avisos push.
 
@@ -97,19 +98,20 @@ si tienes dudas, hazlo **privado**.
   desviaciones y recomendaciones por comida, y búsqueda de patrones en 14 días. Es solo informativo.
 - **Cuentas compartidas**: varias cuentas usan los datos de un mismo niño (`dataUid` en `users/{uid}`, desde *Usuarios*).
   Las personas se dan de alta **por invitación**: el administrador genera un enlace de un solo uso (`/unirse/<código>`) y la persona
-  crea su propia cuenta. Guía en `COMPARTIR-REGISTRO.md`. Requiere publicar las reglas de `firestore.rules`.
+  crea su propia cuenta. Guía en `COMPARTIR-NINO.md`. Requiere publicar las reglas de `firestore.rules`.
 - **Avisos**: si alguien guarda una hipoglucemia (<70) o hiperglucemia (>350), el resto lo ve al instante
   (banner, sonido, vibración, notificación) si tiene la app abierta. **Con la app cerrada**, notificaciones push
   (Firebase Cloud Messaging + función de Netlify), también en el plan gratuito: configúralo con `PUSH.md`.
 - **Docs**: sube ficheros Markdown; cada uno tiene su URL (`/docs/<nombre>`); enlaces, correos y teléfonos son
   pulsables. Hace falta iniciar sesión (los datos son del niño). Se sanea el contenido (sin scripts ni imágenes).
-- Cuando se haga una actualización de versión, lee `MIGRACION.md` (qué respaldar y qué reglas publicar) en la carpeta `doc`.
+- Al actualizar desde la versión anterior, lee `MIGRACION.md` (qué respaldar y qué reglas publicar).
 
 ## Novedades desde la v2.0.0
 
 ### Varios niños por cuenta
 
-- Una cuenta puede acceder a **varios niños** (p. ej. unos abuelos con varios nietos): **Usuarios → «Niños a los que accede»**. Cada niño se identifica por su **nombre**; la cuenta ve un selector **Niño** (o «Datos de Ana» si solo es uno). Los avisos push llegan de todos sus niños e indican de cuál. Ver `NUEVO-SUJETO-MEDICION.md`.
+- Una cuenta puede acceder a **varios niños** (p. ej. unos abuelos con varios nietos): **Usuarios → «Niños a los que accede»**. Cada niño se identifica por su
+  **nombre de niño** (`kidName`, distinto del nombre de la persona de la cuenta; se edita en *Usuarios*); la cuenta ve un selector **Niño** (o «Datos de Ana» si solo es uno). Los avisos push llegan de todos sus niños e indican de cuál. Ver `NUEVO-NINO.md`.
 - Requiere **publicar las reglas de `firestore.rules`** (nuevo campo `dataUids` en el perfil) y volver a desplegar la función de avisos.
 
 ### Raciones
@@ -173,6 +175,19 @@ si tienes dudas, hazlo **privado**.
 - El modelo predictivo **no se usa para corregir** el monitor: solo se contrasta con el capilar para comparar su error.
 - Los parámetros (pares mínimos, ventana de 180 días, separación máxima…) están al principio de `core/calibration.ts`.
 - Es informativo: no sustituye al capilar ni a la valoración del equipo médico, y nunca modifica ni oculta un aviso de hipoglucemia del monitor.
+
+### Importar el CSV del sensor
+
+- Pestaña **Monitor → Importar datos del sensor**. Se sube el CSV de glucosa que se descarga de la web del monitor (FreeStyle Libre / LibreView, en español o inglés;
+  UTF-8 o Windows-1252; mg/dL o mmol/L). Se puede repetir cada semana: **importar el mismo archivo dos veces no cambia nada**.
+- Solo se importa el **historial continuo**. Se guarda como una serie por día (`sensor` dentro del documento del día, pares `[minuto, mg/dL]`) y se dibuja como una
+  línea fina en la **curva de glucemia** del día y de las instantáneas de días cerrados, con media, mínimo, máximo y % en rango. **No rellena ni modifica** las mediciones
+  anotadas a mano, ni intervienen en dosis o previsiones.
+- No se importan escaneos, glucemias de tira, insulina, comidas ni notas. La primera línea del archivo (que lleva el nombre del niño) y el nombre del archivo no se leen,
+  no se muestran y no se guardan.
+- Los «eventos» del sensor del archivo se ofrecen como posibles cambios de sensor, **sin marcar**: el archivo no indica con certeza qué son.
+- En las **mediciones intermedias**, la opción por defecto es ahora **Capilar** y después Monitor.
+- Cada día importado ocupa unos pocos KB (hasta 288 lecturas de 5 minutos); no hace falta cambiar las reglas de Firestore.
 
 ## Aviso
 

@@ -1,6 +1,8 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { classify } from '../core/glucose';
+import { seriesPoints, seriesStats } from '../core/libre-import';
 import { DayAnalysis, MeasuredPoint, fmtTime } from '../core/predict';
+import { fmtNum } from '../core/util';
 
 const W = 640;
 const H = 340;
@@ -78,6 +80,11 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
             <path [attr.d]="c.d" class="pred" />
           }
 
+          <!-- sensor continuo (importado del CSV del monitor) -->
+          @for (seg of g.sensorPaths; track $index) {
+            <path [attr.d]="seg" class="sensor-line" />
+          }
+
           <!-- medido -->
           <path [attr.d]="g.line" class="measured" />
           @for (p of g.dots; track p.index) {
@@ -100,6 +107,9 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
         </svg>
 
         <div class="chart-legend">
+          @if (g.sensorPaths.length) {
+            <span><i class="lg sensor"></i> Sensor continuo</span>
+          }
           <span><i class="lg line"></i> Medido</span>
           <span><i class="lg dash"></i> Previsto</span>
           <span><i class="lg dot"></i> Monitor / comida</span>
@@ -107,6 +117,13 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
           <span><i class="lg tri"></i> Ejercicio</span>
           <span><i class="lg dose"></i> Dosis</span>
         </div>
+
+        @if (stats(); as st) {
+          <p class="muted small sensor-stats">
+            Sensor: {{ st.n }} lecturas · media {{ fmt(st.mean, 0) }} mg/dL · de {{ st.min }} a {{ st.max }} ·
+            {{ fmt(st.inRange, 0) }} % en rango (70–180) · {{ fmt(st.low, 0) }} % por debajo · {{ fmt(st.high, 0) }} % por encima
+          </p>
+        }
 
         @if (sel(); as s) {
           <p class="notice chart-sel" role="status">
@@ -135,6 +152,13 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
 })
 export class GlucoseChart {
   readonly analysis = input.required<DayAnalysis>();
+  /** Serie continua del sensor del día (`DayRecord.sensor`). */
+  readonly sensor = input<number[] | undefined>(undefined);
+  protected readonly fmt = fmtNum;
+  protected readonly stats = computed(() => {
+    const st = seriesStats(this.sensor());
+    return st.n ? st : null;
+  });
   protected readonly W = W;
   protected readonly H = H;
   protected readonly M = M;
@@ -156,10 +180,11 @@ export class GlucoseChart {
     const a = this.analysis();
     const measured = a.measured;
     const preds = a.episodes.filter((e) => e.points.length > 1);
-    const hasData = measured.length > 0;
+    const sp = seriesPoints(this.sensor());
+    const hasData = measured.length > 0 || sp.length > 0;
 
     // Rango horario: ajustado a los datos, mínimo 6 h, en horas redondas
-    const ts = [...measured.map((p) => p.t), ...a.doses.map((d) => d.t), ...preds.flatMap((e) => [e.points[0].t, e.points[e.points.length - 1].t])];
+    const ts = [...sp.map((p) => p.t), ...measured.map((p) => p.t), ...a.doses.map((d) => d.t), ...preds.flatMap((e) => [e.points[0].t, e.points[e.points.length - 1].t])];
     let t0 = ts.length ? Math.min(...ts) : 360;
     let t1 = ts.length ? Math.max(...ts) : 1320;
     t0 = Math.max(0, Math.floor((t0 - 30) / 60) * 60);
@@ -167,7 +192,7 @@ export class GlucoseChart {
     if (t1 - t0 < 360) t1 = Math.min(1440, t0 + 360);
     if (t1 - t0 < 360) t0 = Math.max(0, t1 - 360);
 
-    const vals = [...measured.map((p) => p.g), ...preds.flatMap((e) => e.points.map((p) => p.g))];
+    const vals = [...sp.map((p) => p.g), ...measured.map((p) => p.g), ...preds.flatMap((e) => e.points.map((p) => p.g))];
     const yMin = 40;
     const yMax = Math.max(250, Math.ceil((Math.max(0, ...vals) + 15) / 50) * 50);
 
@@ -193,6 +218,17 @@ export class GlucoseChart {
     });
     const line = measured.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.g).toFixed(1)}`).join(' ');
 
+    // una línea por tramo: si faltan lecturas más de 20 min (sensor apagado, calentamiento…) no se unen
+    const sensorPaths: string[] = [];
+    let cur = '';
+    let prev = -999;
+    for (const p of sp) {
+      const pt = `${x(p.t).toFixed(1)} ${y(p.g).toFixed(1)}`;
+      cur = p.t - prev > 20 || !cur ? (cur && sensorPaths.push(cur), `M${pt}`) : `${cur}L${pt}`;
+      prev = p.t;
+    }
+    if (cur) sensorPaths.push(cur);
+
     const curves = preds.map((e) => ({
       name: e.mealId,
       d: e.points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.g).toFixed(1)}`).join(' '),
@@ -210,6 +246,6 @@ export class GlucoseChart {
       doses.push({ x: dx, row, text: `${lenta ? 'L' : 'R'} ${d.units.toLocaleString('es-ES')} U` });
     }
 
-    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, doses, measured };
+    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, doses, measured, sensorPaths };
   });
 }

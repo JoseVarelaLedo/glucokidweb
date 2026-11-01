@@ -70,6 +70,11 @@ export interface DayRecord {
   meals: Meal[];
   extras: ExtraReading[];
   activities: Activity[];
+  /**
+   * Serie continua del sensor importada del CSV del monitor: pares `[minuto del día, mg/dL, minuto, mg/dL, …]` ordenados por minuto.
+   * Solo se dibuja en la gráfica del día; no rellena las mediciones ni entra en los cálculos de dosis.
+   */
+  sensor?: number[];
 }
 
 export interface InjectionDef {

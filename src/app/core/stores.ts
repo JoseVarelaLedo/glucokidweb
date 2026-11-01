@@ -67,6 +67,11 @@ export class LocalStore implements Store {
     return this.read<DayRecord>('day:' + date);
   }
   async saveDay(d: DayRecord): Promise<WriteResult> {
+    // Una copia en pantalla sin la serie del sensor (cargada antes de importar) no debe borrarla.
+    if (d.sensor === undefined) {
+      const old = this.read<DayRecord>('day:' + d.date);
+      if (old?.sensor) d = { ...d, sensor: old.sensor };
+    }
     this.write('day:' + d.date, d);
     return 'saved';
   }
@@ -171,7 +176,7 @@ export class FirestoreStore implements Store {
     return snap.exists() ? (snap.data() as DayRecord) : null;
   }
   async saveDay(d: DayRecord): Promise<WriteResult> {
-    return this.commit(this.fs.setDoc(this.ref('days', d.date), { ...d, updatedAt: Date.now() }));
+    return this.commit(this.fs.setDoc(this.ref('days', d.date), { ...d, updatedAt: Date.now() }, { merge: true }));
   }
 
   async loadRange(from: string, to: string): Promise<DayRecord[]> {

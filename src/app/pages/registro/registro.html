@@ -11,7 +11,7 @@
 </div>
 
 @if (view() === 'monitor') {
-  <div class="evo-wrap"><app-monitor-panel /></div>
+  <div class="evo-wrap"><app-sensor-import (imported)="onImported()" /><app-monitor-panel /></div>
 } @else if (view() !== 'dia') {
   <div class="evo-wrap"><app-evolution [period]="period()" /></div>
 } @else {
@@ -164,8 +164,8 @@
                     <button type="button" class="icon-btn danger" (click)="removeExtra(d, x)" aria-label="Eliminar medición">×</button>
                   </div>
                   <div class="seg" role="radiogroup" aria-label="Tipo de medición">
-                    <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
                     <button type="button" role="radio" [class.on]="x.source === 'capilar'" [attr.aria-checked]="x.source === 'capilar'" (click)="x.source = 'capilar'">Capilar</button>
+                    <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
                   </div>
                   <app-reading-editor [reading]="x" [hintDate]="x.source === 'capilar' ? '' : date()" />
                   <div class="field">

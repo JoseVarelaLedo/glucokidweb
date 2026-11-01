@@ -1198,6 +1198,14 @@ input[type='range'] {
     stroke-dasharray: 7 5;
     opacity: 0.9;
   }
+  .sensor-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    opacity: 0.75;
+  }
   .measured {
     fill: none;
     stroke: var(--text);
@@ -1222,6 +1230,11 @@ input[type='range'] {
     display: inline-block;
     vertical-align: middle;
     margin-right: 4px;
+    &.sensor {
+      width: 18px;
+      border-top: 1.6px solid var(--accent);
+      opacity: 0.75;
+    }
     &.line {
       width: 18px;
       border-top: 2.5px solid var(--text);
@@ -1929,4 +1942,32 @@ input[type='range'] {
     gap: 8px;
     min-height: 36px;
   }
+}
+
+/* Importación del CSV del sensor */
+.sensor-import {
+  .sensor-preview {
+    margin-top: 0.8rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.8rem;
+  }
+  .sensor-facts {
+    margin: 0.2rem 0 0.6rem;
+    padding-left: 1.1rem;
+  }
+  .sensor-events {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin: 0.6rem 0;
+    padding: 0.5rem 0.8rem;
+    .check {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      min-height: 40px;
+    }
+  }
+}
+.sensor-stats {
+  margin: 0.4rem 0;
 }

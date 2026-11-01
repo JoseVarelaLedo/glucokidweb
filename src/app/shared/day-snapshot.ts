@@ -214,7 +214,7 @@ export class DaySnapshot {
 
   protected hasData(): boolean {
     const d = this.day();
-    return d.meals.some((m) => this.used(m)) || d.activities.length > 0 || d.extras.length > 0;
+    return d.meals.some((m) => this.used(m)) || d.activities.length > 0 || d.extras.length > 0 || !!d.sensor?.length;
   }
 }
 

@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { AuthService } from './auth.service';
+import { mergeSeries } from './libre-import';
 import { makeDefaultFoods, makeDefaultSettings, migrateSettings, newDay, normalizeExtras, syncDay } from './defaults';
 import { firebaseEnabled } from './firebase.config';
 import { DayRecord, DocItem, Food, FoodEntry, Settings } from './models';
@@ -86,6 +87,25 @@ export class DataService {
   /** Rango de días ya guardados (sin crear los vacíos). */
   getRange(from: string, to: string): Promise<DayRecord[]> {
     return this.store.loadRange(from, to);
+  }
+
+  /**
+   * Guarda las series continuas del sensor (una por día) sin tocar nada más del día. Solo escribe los días en los que hay algo nuevo,
+   * así que repetir la importación del mismo archivo no cambia nada.
+   */
+  async importSensor(series: Map<string, number[]>): Promise<{ days: number; added: number; changed: number }> {
+    const out = { days: 0, added: 0, changed: 0 };
+    for (const [date, incoming] of series) {
+      const day = await this.getDay(date);
+      const r = mergeSeries(day.sensor, incoming);
+      if (!r.added && !r.changed) continue;
+      day.sensor = r.merged;
+      await this.saveDay(day);
+      out.days++;
+      out.added += r.added;
+      out.changed += r.changed;
+    }
+    return out;
   }
 
   /** Cambios en directo del día que edita otro cuidador. */

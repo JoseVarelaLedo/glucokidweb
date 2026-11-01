@@ -1,12 +1,13 @@
 # Añadir un niño nuevo y cómo se identifica cada niño
 
 ## Cómo funciona (resumen)
+
 En GlucoKid **no existe una «ficha de niño» aparte**. Un niño es **una cuenta con datos propios**:
 
 - Cada cuenta tiene un **UID** (identificador único de 28 caracteres que le asigna Firebase Authentication al crearla).
 - Los datos del niño cuelgan de ese UID en Firestore:
 
-```
+`
 users/{UID}                 ← perfil de la cuenta: email, name, role, active, (dataUid)
 users/{UID}/days/{AAAA-MM-DD}   un documento por día (comidas, mediciones, actividad)
 users/{UID}/config/settings     ajustes (pautas, factor de sensibilidad, cambios de sensor…)
@@ -14,26 +15,37 @@ users/{UID}/config/foods        catálogo de alimentos
 users/{UID}/docs/{nombre}       documentación en Markdown
 users/{UID}/alerts/…            avisos entre cuidadores
 users/{UID}/devices/…           dispositivos que reciben avisos push
-```
+`
 
 - Una cuenta **sin** `dataUid` es un **niño** («datos propios»). Aparece en la lista de niños.
 - Una cuenta **con** `dataUid = UID_del_niño` es un **cuidador**: entra con su propio correo y contraseña, pero lee y escribe en
   `users/{UID_del_niño}/…`. Así varias personas comparten un niño (ver `COMPARTIR-NINO.md`).
 
 **Identificar a un niño:** su identificador interno es el **UID de su cuenta** (anónimo, sin datos personales). Para las personas, cada niño se
-identifica por su **nombre** (`name`), que es el que se ve en la aplicación: pon al crear la cuenta del niño el nombre o apodo con el que lo reconoce
-la familia («Ana», «Lucía»). Se puede cambiar cuando quieras y no afecta a los datos; no lo uses como clave.
+identifica por su **nombre de niño** (`kidName`), que es el que se ve en la aplicación: el nombre o apodo con el que lo reconoce la familia («Ana», «Lucía»).
+Es **distinto del nombre de la persona** de la cuenta (`name`), que es el que sale en los avisos («Mamá ha registrado…»). Así, una cuenta de padre o
+madre puede ser a la vez el espacio donde se guardan los datos del niño sin que se confundan los dos nombres. Si no se pone nombre de niño se usa el de la cuenta.
+Se edita en **Usuarios → «Nombre del niño»** (solo aparece en las cuentas con datos propios) y se puede cambiar cuando quieras sin afectar a los datos. No lo uses como clave.
+
+**Cuentas, perfiles y datos (para no confundirse en la consola de Firebase):**
+
+- **Authentication → Users**: quién puede entrar (correo, contraseña y UID).
+- **Firestore → `users/{mismo UID}`**: el perfil de esa cuenta (`name`, `kidName`, `role`, `active`, `dataUid`/`dataUids`).
+- **Firestore → `users/{UID}/days, config, docs…`**: los datos del niño, **solo** si la cuenta no tiene `dataUid` (es un espacio de datos).
+- Es normal que tu cuenta de administrador sea, a la vez, el espacio de un niño (si es la cuenta con la que empezaste): ponle entonces tu nombre en
+  «Nombre de la persona» y el del niño en «Nombre del niño».
 Quien accede a un solo niño ve arriba «Datos de **Ana**»; quien accede a varios (o es administrador) ve un selector **Niño** con los nombres.
 Para localizar un UID: Firebase → **Authentication → Users** (columna «User UID»), o Firestore → colección `users` (el ID de cada documento).
 
 ## Crear un niño nuevo (administrador)
+
 Requisito: tu cuenta es **administrador**. Cada niño necesita **un correo propio y distinto** (Firebase no admite el mismo correo en dos cuentas).
 Puedes usar un alias del tuyo si tu proveedor lo permite (por ejemplo `tunombre+ana@gmail.com` llega a `tunombre@gmail.com`
 y para Firebase es un correo distinto). Ese correo sirve para restablecer la contraseña, así que debe poder recibir correo.
 
 1. **Usuarios → Crear cuenta a mano**.
-2. Rellena **Nombre** (el del niño), **Correo** (el de esa cuenta), **Contraseña inicial** (mínimo 6 caracteres) y **Rol = Usuario**.
-3. **Datos = «Propios (es un niño nuevo)»**. *(Es lo que lo convierte en un niño y no en un cuidador.)*
+2. Rellena **Nombre** (de la persona o, si es solo la cuenta del niño, su nombre), **Correo** (el de esa cuenta), **Contraseña inicial** (mínimo 6 caracteres) y **Rol = Usuario**.
+3. **Datos = «Propios (es un niño nuevo)»**, y aparece **Nombre del niño**: escribe el que usa la familia («Ana»). *(Es lo que lo convierte en un niño y no en un cuidador.)*
 4. **Crear cuenta**. Aparece en la lista con la etiqueta «Datos propios».
 5. Abre el selector **Niño** de la cabecera (solo lo ves como administrador) y elige al niño nuevo. La primera vez que entras, la aplicación crea
    su espacio con los **ajustes y el catálogo de alimentos por defecto**, que puedes adaptar en *Ajustes* y *Alimentos*
@@ -56,6 +68,7 @@ Ejemplo: tres niños (Ana, Lucía y Pablo), con sus padres y unos abuelos que qu
 4. La próxima vez que entren (o recarguen la página) verán el selector **Niño** con «Ana», «Lucía» y «Pablo». El último que eligieron se recuerda en ese dispositivo.
 
 Cómo se comporta:
+
 - Cada cuenta ve **solo** los niños que tiene marcados (lo imponen las reglas de Firestore en el servidor).
 - Los **avisos push** (con la app cerrada) llegan de **todos** los niños de la cuenta, y llevan el **nombre del niño** («⚠ Hipoglucemia de Ana»).
   Para que un dispositivo ya registrado reciba los de los niños añadidos después, en ese dispositivo: **Ajustes → Avisos → desactivar y volver a activar**.

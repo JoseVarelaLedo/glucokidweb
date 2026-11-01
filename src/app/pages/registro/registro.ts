@@ -16,6 +16,7 @@ import { DayCurve } from '../../shared/day-curve';
 import { DaySnapshot } from '../../shared/day-snapshot';
 import { Evolution } from '../../shared/evolution';
 import { MonitorPanel } from '../../shared/monitor-panel';
+import { SensorImport } from '../../shared/sensor-import';
 import { sensorDayOf } from '../../core/calibration';
 import { Period } from '../../core/evolution';
 import { ReadingEditor } from '../../shared/reading-editor';
@@ -27,15 +28,14 @@ const ACTIVITY_SUGGESTIONS = [
   'Bicicleta',
   'Paseo',
   'Carrera',
-  'Educación física colegio',
+  'Educación física',
   'Baile',
   'Parque / juego libre',
-  'Cumpleaños recinto juegos'
 ];
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel],
+  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
@@ -384,13 +384,18 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
     d.extras.push({
       id: uid(),
       afterInjectionId: m.injectionId,
-      source: 'monitor',
+      source: 'capilar',
       time: this.isToday() ? nowTime() : '',
       value: null,
       arrow: null,
       note: '',
       extraRations: null,
     });
+  }
+
+  /** Tras importar el CSV del sensor: recarga el día que se está viendo para que aparezca la serie. */
+  protected onImported(): void {
+    void this.goTo(this.date());
   }
 
   protected removeExtra(d: DayRecord, x: ExtraReading): void {

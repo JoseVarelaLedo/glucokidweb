@@ -19,7 +19,7 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
   template: `
     <section class="card day-curve" aria-label="Curva de glucemia del día">
       <h3>Curva de glucemia</h3>
-      <app-glucose-chart [analysis]="analysis()" />
+      <app-glucose-chart [analysis]="analysis()" [sensor]="day().sensor" />
 
       <dl class="summary tight">
         <div><dt>Insulina rápida</dt><dd>{{ fmt(totals().rapid) }} U</dd></div>
