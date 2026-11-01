@@ -1894,3 +1894,39 @@ input[type='range'] {
 .evo-table tr.faint {
   color: var(--muted);
 }
+
+/* ---------------- niño activo ---------------- */
+.kid-strip {
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.user-names {
+  display: grid;
+  gap: 8px;
+  .field {
+    margin: 0;
+  }
+}
+.user-kids {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  legend {
+    padding: 0;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+  }
+}

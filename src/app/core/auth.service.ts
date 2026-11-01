@@ -2,6 +2,7 @@ import { Injectable, computed, signal } from '@angular/core';
 import type { Auth } from 'firebase/auth';
 import { getDb, getFirebaseApp, wipeLocalCache } from './firebase-app';
 import { firebaseEnabled } from './firebase.config';
+import { childrenOf } from './children';
 import { InviteItem, UserProfile } from './models';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'noAccess' | 'local';
@@ -17,9 +18,59 @@ export class AuthService {
   readonly isAdmin = computed(() => this.profile()?.role === 'admin');
   /** Propietario de los datos propios ('local' en modo sin Firebase). */
   readonly uid = computed(() => this.profile()?.uid ?? 'local');
-  /** Espacio de datos de esta cuenta: el suyo, o el del niño con el que comparte. */
-  readonly dataUid = computed(() => this.profile()?.dataUid || this.profile()?.uid || 'local');
+  /** Niños (espacios de datos) a los que accede esta cuenta. */
+  readonly children = computed(() => childrenOf(this.profile()));
+  /** Niño elegido por esta cuenta (si tiene varios); se recuerda en este dispositivo. */
+  private readonly chosen = signal('');
+  /** Espacio de datos activo de esta cuenta: el suyo, o el del niño con el que comparte (el elegido, si son varios). */
+  readonly dataUid = computed(() => {
+    const kids = this.children();
+    return kids.includes(this.chosen()) ? this.chosen() : kids[0];
+  });
+  /** Nombres de los niños a los que accede (para identificarlos en el selector). */
+  readonly childNames = signal<Record<string, string>>({});
   readonly name = computed(() => this.profile()?.name || this.email() || 'Alguien');
+
+  /** Nombre con el que se identifica a un niño. */
+  childName(uid: string): string {
+    return this.childNames()[uid] || 'Niño';
+  }
+
+  /** Cambia de niño (solo entre los de esta cuenta) y lo recuerda en este dispositivo. */
+  setChild(uid: string): void {
+    if (!this.children().includes(uid)) return;
+    this.chosen.set(uid);
+    try {
+      localStorage.setItem('glucokid:child:' + (this.profile()?.uid ?? ''), uid);
+    } catch {
+      /* sin almacenamiento: solo dura esta sesión */
+    }
+  }
+
+  private async loadChildNames(self: UserProfile): Promise<void> {
+    // Etiqueta del niño: su «nombre de niño»; si no existe, el nombre de la cuenta salvo que sea un administrador
+    // (que es una persona y no el niño, p. ej. un padre cuyo espacio guarda los datos del niño)
+    const label = (kid: string | undefined, name: string, role: string | undefined): string => kid?.trim() || (role === 'admin' ? '' : name);
+    const names: Record<string, string> = {};
+    const own = label(self.kidName, self.name, self.role);
+    if (own) names[self.uid] = own;
+    try {
+      const db = await getDb();
+      const fs = await import('firebase/firestore');
+      await Promise.all(
+        childrenOf(self)
+          .filter((k) => k !== self.uid)
+          .map(async (k) => {
+            const s = await fs.getDoc(fs.doc(db, 'users', k)).catch(() => null);
+            const x = s?.exists() ? s.data() : null;
+            const n = x ? label(x['kidName'] as string | undefined, (x['name'] as string) || '', x['role'] as string | undefined) : '';
+            if (n) names[k] = n;
+          }),
+      );
+    } finally {
+      this.childNames.set(names);
+    }
+  }
 
   /** Tareas a hacer antes de cerrar sesión (p. ej. retirar este dispositivo de los avisos push). */
   readonly beforeLogout: Array<() => Promise<void>> = [];
@@ -68,8 +119,16 @@ export class AuthService {
         role: d['role'] === 'admin' ? 'admin' : 'user',
         active: true,
         dataUid: (d['dataUid'] as string) || '',
+        kidName: (d['kidName'] as string) || '',
+        dataUids: Array.isArray(d['dataUids']) ? (d['dataUids'] as unknown[]).filter((x): x is string => typeof x === 'string') : [],
       });
+      try {
+        this.chosen.set(localStorage.getItem('glucokid:child:' + uid) ?? '');
+      } catch {
+        this.chosen.set('');
+      }
       this.status.set('signedIn');
+      if (this.profile()) void this.loadChildNames(this.profile() as UserProfile);
     } catch {
       this.profile.set(null);
       this.status.set('noAccess');

@@ -63,7 +63,7 @@ export class InvitesService {
     const item: InviteItem = {
       code: randomCode(),
       dataUid: space.uid,
-      spaceName: space.name,
+      spaceName: space.kidName?.trim() || space.name,
       label: label.trim().slice(0, 60),
       createdByName: this.auth.name(),
       createdAt: now,

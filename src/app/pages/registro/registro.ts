@@ -27,9 +27,10 @@ const ACTIVITY_SUGGESTIONS = [
   'Bicicleta',
   'Paseo',
   'Carrera',
-  'Educación física',
+  'Educación física colegio',
   'Baile',
   'Parque / juego libre',
+  'Cumpleaños recinto juegos'
 ];
 
 @Component({

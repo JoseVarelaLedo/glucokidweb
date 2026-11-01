@@ -14,28 +14,53 @@
         @if (!u.active) {
           <span class="chip warn">Desactivado</span>
         }
-        @if (!u.dataUid) {
-          <span class="chip">Datos propios{{ dependents(u) ? ' · compartidos con ' + dependents(u) : '' }}</span>
+        @if (!isCaregiver(u)) {
+          <span class="chip">Niño: {{ users.kidLabel(u) }}{{ dependents(u) ? ' · ' + dependents(u) + ' cuidadores' : '' }}</span>
         } @else {
-          <span class="chip">Comparte datos de {{ spaceName(u.dataUid) }}</span>
+          <span class="chip">Cuida de {{ kidNames(u) }}</span>
         }
         <div class="muted small">{{ u.email }}</div>
       </div>
 
-      <div class="field">
-        <label [attr.for]="'sp-' + u.uid">Datos que usa</label>
-        <select
-          [id]="'sp-' + u.uid"
-          [ngModel]="u.dataUid || ''"
-          (ngModelChange)="update(u, { dataUid: $event })"
-          [disabled]="u.uid === auth.uid() || dependents(u) > 0"
-        >
-          <option value="">Propios (un niño)</option>
-          @for (s of otherSpaces(u); track s.uid) {
-            <option [value]="s.uid">Comparte los de {{ s.name }}</option>
-          }
-        </select>
+      <div class="user-names">
+        <div class="field">
+          <label [attr.for]="'un-' + u.uid">Nombre de la persona</label>
+          <input [id]="'un-' + u.uid" type="text" maxlength="80" [value]="u.name" (change)="rename(u, $any($event.target).value)" />
+        </div>
+        @if (!isCaregiver(u)) {
+          <div class="field">
+            <label [attr.for]="'kn-' + u.uid">Nombre del niño</label>
+            <input
+              [id]="'kn-' + u.uid"
+              type="text"
+              maxlength="60"
+              placeholder="p. ej. Ana"
+              [value]="u.kidName || ''"
+              (change)="update(u, { kidName: $any($event.target).value.trim() })"
+            />
+            @if (!u.kidName) {
+              <p class="muted small">Sin nombre de niño se muestra el de la cuenta ({{ u.name }}). Ponlo para que los demás identifiquen al niño.</p>
+            }
+          </div>
+        }
       </div>
+
+      <fieldset class="user-kids" [disabled]="u.uid === auth.uid() || dependents(u) > 0">
+        <legend>Niños a los que accede</legend>
+        @for (s of otherSpaces(u); track s.uid) {
+          <label>
+            <input type="checkbox" [checked]="hasKid(u, s.uid)" (change)="toggleKid(u, s.uid, $any($event.target).checked)" />
+            {{ users.kidLabel(s) }}
+          </label>
+        } @empty {
+          <span class="muted small">No hay otros niños.</span>
+        }
+        <span class="muted small">
+          @if (dependents(u) > 0) { Otras cuentas usan sus datos: no puede acceder a otros niños. }
+          @else if (!isCaregiver(u)) { Sin marcar: es un niño con datos propios. }
+          @else { Puedes marcar varios (p. ej. unos abuelos con varios nietos). }
+        </span>
+      </fieldset>
 
       <div class="actions">
         <button type="button" class="btn small" (click)="view(u)">Ver sus datos</button>
@@ -65,7 +90,7 @@
     <label for="iv-space">Niño</label>
     <select id="iv-space" [(ngModel)]="invSpace">
       @for (s of users.spaces(); track s.uid) {
-        <option [value]="s.uid">{{ s.name }}</option>
+        <option [value]="s.uid">{{ users.kidLabel(s) }}</option>
       }
     </select>
   </div>
@@ -149,10 +174,16 @@
     <select id="nu-share" [(ngModel)]="shareWith">
       <option value="">Propios (es un niño nuevo)</option>
       @for (s of users.spaces(); track s.uid) {
-        <option [value]="s.uid">Comparte los datos de {{ s.name }}</option>
+        <option [value]="s.uid">Comparte los datos de {{ users.kidLabel(s) }}</option>
       }
     </select>
   </div>
+  @if (!shareWith) {
+    <div class="field">
+      <label for="nu-kid">Nombre del niño</label>
+      <input id="nu-kid" type="text" maxlength="60" placeholder="p. ej. Ana" [(ngModel)]="kidName" />
+    </div>
+  }
   <div class="field">
     <label for="nu-role">Rol</label>
     <select id="nu-role" [(ngModel)]="role">

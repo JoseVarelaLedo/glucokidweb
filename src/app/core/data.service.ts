@@ -28,9 +28,11 @@ export class DataService {
     return this.initializing;
   }
 
-  /** Solo administradores: cambia a los datos de otro usuario (la seguridad real la imponen las reglas de Firestore). */
+  /** Cambia a los datos de otro niño: cualquiera si eres administrador, o uno de los tuyos (la seguridad real la imponen las reglas de Firestore). */
   switchUser(uid: string): Promise<void> {
-    if (!this.auth.isAdmin()) return Promise.resolve();
+    // Los administradores pueden ver a cualquiera; el resto, solo a los niños de su cuenta.
+    if (!this.auth.isAdmin() && !this.auth.children().includes(uid)) return Promise.resolve();
+    if (!this.auth.isAdmin()) this.auth.setChild(uid);
     this.ready.set(false);
     this.viewUid.set(uid);
     this.initializing = undefined;

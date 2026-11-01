@@ -9,17 +9,15 @@ import { nowTime, todayStr } from './util';
 
 const KEY_DISMISSED = 'glucokid:alerts-dismissed';
 const KEY_SOUND = 'glucokid:alerts-sound';
-// avisos de las últimas 6 h
-const RECENT_MS = 6 * 3600 * 1000;
-// sólo se avisa de lecturas de las últimas 3 h
-const FRESH_READING_MIN = 180;
+const RECENT_MS = 6 * 3600 * 1000; // avisos de las últimas 6 h
+const FRESH_READING_MIN = 180; // solo se avisa de lecturas de las últimas 3 h
 
 /**
  * Avisos entre personas que comparten un niño. Cuando alguien guarda una lectura de hipoglucemia
  * (< 70) o de hiperglucemia (> 350), se escribe un aviso en Firestore; los demás dispositivos con
  * la app abierta lo reciben al instante (banner, sonido, vibración y notificación del navegador).
  *
- * con la app cerrada, el aviso llega por notificación push (PushService + función de Netlify, ver PUSH.md) si está configurada.
+ * Con la app cerrada, el aviso llega por notificación push (PushService + función de Netlify, ver PUSH.md) si está configurada.
  */
 @Injectable({ providedIn: 'root' })
 export class AlertsService {
@@ -36,11 +34,10 @@ export class AlertsService {
   private unwatch?: () => void;
   private startedAt = 0;
   private readonly seen = new Set<string>();
-  // día --> lecturas fuera de rango ya conocidas
-  private readonly known = new Map<string, Set<string>>();
+  private readonly known = new Map<string, Set<string>>(); // día → lecturas fuera de rango ya conocidas
   private audio?: AudioContext;
 
-  /** empieza a escuchar los avisos del niño actual (se llama cuando los datos están listos). */
+  /** Empieza a escuchar los avisos del niño actual (se llama cuando los datos están listos). */
   start(): void {
     this.stop();
     this.startedAt = Date.now();
@@ -68,7 +65,7 @@ export class AlertsService {
     }
     if (!fresh.length) return;
     this.list.update((l) => [...fresh, ...l].sort((x, y) => y.at - x.at));
-    // sólo suena/vibra para avisos creados DESPUÉS de abrir la app; los anteriores solo aparecen en el banner
+    // Solo suena/vibra para avisos creados DESPUÉS de abrir la app; los anteriores solo aparecen en el banner
     const live = fresh.filter((a) => a.at >= this.startedAt - 5000);
     if (live.length) void this.notify(live[0], live.length);
   }
@@ -102,7 +99,8 @@ export class AlertsService {
     if (this.permission() === 'granted') {
       try {
         const reg = await navigator.serviceWorker?.getRegistration();
-        const title = a.kind === 'hipo' ? '⚠ Hipoglucemia registrada' : '⚠ Hiperglucemia registrada';
+        const kid = this.auth.children().length > 1 ? this.auth.childName(this.data.viewUid() || this.auth.dataUid()) : '';
+        const title = (a.kind === 'hipo' ? '⚠ Hipoglucemia' : '⚠ Hiperglucemia') + (kid ? ` de ${kid}` : ' registrada');
         if (reg) await reg.showNotification(title, { body, tag: a.id, requireInteraction: true });
         else new Notification(title, { body, tag: a.id });
       } catch {
@@ -136,11 +134,10 @@ export class AlertsService {
   setSound(on: boolean): void {
     this.sound.set(on);
     this.write(KEY_SOUND, on ? '1' : '0');
-    // vista previa (además desbloquea el audio del navegador)
-    if (on) this.beep(false);
+    if (on) this.beep(false); // vista previa (además desbloquea el audio del navegador)
   }
 
-  /** pide permiso para notificaciones del navegador y registra el service worker mínimo. */
+  /** Pide permiso para notificaciones del navegador y registra el service worker mínimo. */
   async enableNotifications(): Promise<void> {
     if (typeof Notification === 'undefined') {
       this.permission.set('unsupported');
@@ -178,14 +175,14 @@ export class AlertsService {
     return out;
   }
 
-  /** marca como "ya conocidas" las lecturas fuera de rango que ya tiene el día (al cargarlo o recibir cambios de otro). */
+  /** Marca como "ya conocidas" las lecturas fuera de rango que ya tiene el día (al cargarlo o recibir cambios de otro). */
   baseline(day: DayRecord): void {
     const set = this.known.get(day.date) ?? new Set<string>();
     for (const f of this.flagged(day)) set.add(f.id);
     this.known.set(day.date, set);
   }
 
-  /** tras guardar: avisa de lecturas NUEVAS en hipo/hiper (sólo de hoy y de las últimas 3 horas). */
+  /** Tras guardar: avisa de lecturas NUEVAS en hipo/hiper (solo de hoy y de las últimas 3 horas). */
   async check(day: DayRecord): Promise<void> {
     const set = this.known.get(day.date) ?? new Set<string>();
     this.known.set(day.date, set);
@@ -208,7 +205,7 @@ export class AlertsService {
       };
       try {
         await this.data.pushAlert(alert);
-        // aviso push a los móviles de los demás cuidadores (también con la app cerrada), si está configurado
+        // Aviso push a los móviles de los demás cuidadores (también con la app cerrada), si está configurado
         void this.push.notifyOthers(this.data.viewUid() || this.auth.dataUid(), alert);
       } catch {
         /* sin conexión: el aviso no se podrá enviar; el registro sí queda guardado */

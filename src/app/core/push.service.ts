@@ -87,7 +87,8 @@ export class PushService {
       if (token) {
         const db = await getDb();
         const fs = await import('firebase/firestore');
-        await fs.deleteDoc(fs.doc(db, 'users', this.auth.dataUid(), 'devices', await this.hash(token))).catch(() => undefined);
+        const id = await this.hash(token);
+        await Promise.all(this.auth.children().map((k) => fs.deleteDoc(fs.doc(db, 'users', k, 'devices', id)).catch(() => undefined)));
       }
       const m = await import('firebase/messaging');
       await m.deleteToken(messaging).catch(() => undefined);
@@ -131,13 +132,10 @@ export class PushService {
     if (!token) throw new Error('no-token');
     const db = await getDb();
     const fs = await import('firebase/firestore');
-    await fs.setDoc(fs.doc(db, 'users', this.auth.dataUid(), 'devices', await this.hash(token)), {
-      token,
-      uid: this.auth.uid(),
-      name: this.auth.name(),
-      platform: navigator.userAgent.slice(0, 120),
-      updatedAt: Date.now(),
-    });
+    const id = await this.hash(token);
+    const doc = { token, uid: this.auth.uid(), name: this.auth.name(), platform: navigator.userAgent.slice(0, 120), updatedAt: Date.now() };
+    // El dispositivo recibe los avisos de TODOS los niños de la cuenta (un abuelo con varios nietos los recibe de todos)
+    await Promise.all(this.auth.children().map((k) => fs.setDoc(fs.doc(db, 'users', k, 'devices', id), doc)));
   }
 
   private async hash(s: string): Promise<string> {

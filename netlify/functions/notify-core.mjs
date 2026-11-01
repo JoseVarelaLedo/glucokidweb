@@ -1,6 +1,7 @@
-// script de lógica del envío de avisos push, sin dependencias de Firebase (se inyectan)
-// Flujo: un cuidador guarda una hipo/hiper --> la app llama a esta función con su sesión (ID token) →
-// comprobamos quién es y que puede usar ese espacio --> enviamos una notificación a los dispositivos
+// Lógica del envío de avisos push, sin dependencias de Firebase (se inyectan), para poder probarla.
+//
+// Flujo: un cuidador guarda una hipo/hiper → la app llama a esta función con su sesión (ID token) →
+// comprobamos quién es y que puede usar ese espacio → enviamos una notificación a los dispositivos
 // registrados de los DEMÁS cuidadores de ese niño.
 
 const RE_ID = /^[A-Za-z0-9_:.-]{1,200}$/;
@@ -8,8 +9,7 @@ const RE_SPACE = /^[A-Za-z0-9_-]{1,128}$/;
 const RE_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const RE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DEAD = new Set(['messaging/registration-token-not-registered', 'messaging/invalid-registration-token']);
-// id --> instante (evita reenvíos repetidos en la misma instancia)
-const recent = new Map();
+const recent = new Map(); // id → instante (evita reenvíos repetidos en la misma instancia)
 
 export function clean(body) {
   const a = body && body.alert;
@@ -25,8 +25,8 @@ export function clean(body) {
 }
 
 /**
- * deps: verifyIdToken(token) --> {uid} | lanza · getProfile(uid) --> perfil | null ·
- *       listDevices(space) --> [{id, token, uid}] · send(tokens, data) --> [{ok, code}] · removeDevices(space, ids)
+ * deps: verifyIdToken(token) → {uid} | lanza · getProfile(uid) → perfil | null ·
+ *       listDevices(space) → [{id, token, uid}] · send(tokens, data) → [{ok, code}] · removeDevices(space, ids)
  */
 export async function handleNotify({ method, authorization, body }, deps, now = Date.now()) {
   if (method !== 'POST') return { status: 405, json: { error: 'method' } };
@@ -45,7 +45,8 @@ export async function handleNotify({ method, authorization, body }, deps, now = 
 
   const profile = await deps.getProfile(uid);
   if (!profile || profile.active === false) return { status: 403, json: { error: 'forbidden' } };
-  const allowed = v.space === uid || (profile.dataUid || '') === v.space || profile.role === 'admin';
+  const kids = Array.isArray(profile.dataUids) ? profile.dataUids : [];
+  const allowed = v.space === uid || (profile.dataUid || '') === v.space || kids.includes(v.space) || profile.role === 'admin';
   if (!allowed) return { status: 403, json: { error: 'forbidden' } };
 
   for (const [k, t] of recent) if (now - t > 10 * 60 * 1000) recent.delete(k);
@@ -60,11 +61,15 @@ export async function handleNotify({ method, authorization, body }, deps, now = 
 
   const what = v.alert.kind === 'hipo' ? 'hipoglucemia' : 'hiperglucemia';
   const who = String(profile.name || 'Alguien').slice(0, 60);
+  // Nombre del niño: quien cuida de varios niños necesita saber de cuál es el aviso
+  const space = v.space === uid ? profile : await deps.getProfile(v.space).catch(() => null);
+  // «nombre del niño»; si falta, el de la cuenta salvo que sea administrador (una persona, no el niño)
+  const kid = String((space && (space.kidName || (space.role === 'admin' ? '' : space.name))) || '').trim().slice(0, 60);
   const data = {
     id: v.alert.id,
     kind: v.alert.kind,
-    title: v.alert.kind === 'hipo' ? '⚠ Hipoglucemia registrada' : '⚠ Hiperglucemia registrada',
-    body: `${who} ha registrado ${v.alert.value} mg/dL (${what}) a las ${v.alert.time}.`,
+    title: (v.alert.kind === 'hipo' ? '⚠ Hipoglucemia' : '⚠ Hiperglucemia') + (kid ? ` de ${kid}` : ' registrada'),
+    body: `${who} ha registrado ${v.alert.value} mg/dL${kid ? ` de ${kid}` : ''} (${what}) a las ${v.alert.time}.`,
   };
 
   const results = await deps.send(targets.map((d) => d.token), data);

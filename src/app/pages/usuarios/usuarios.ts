@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { CalcService } from '../../core/calc.service';
 import { DataService } from '../../core/data.service';
 import { Role, UserProfile } from '../../core/models';
+import { childrenOf, isCaregiver } from '../../core/children';
 import { InviteItem } from '../../core/models';
 import { InvitesService } from '../../core/invites.service';
 import { UsersService } from '../../core/users.service';
@@ -28,6 +29,8 @@ export class Usuarios implements OnInit {
   protected role: Role = 'user';
   /** '' = cuenta con datos propios (un niño nuevo); si no, uid del niño con el que comparte. */
   protected shareWith = '';
+  /** Nombre del niño (solo si la cuenta es un niño nuevo). */
+  protected kidName = '';
   /** Invitaciones */
   protected invSpace = '';
   protected invLabel = '';
@@ -121,12 +124,30 @@ export class Usuarios implements OnInit {
   }
 
   protected spaceName(uid: string | undefined): string {
-    return this.users.list().find((u) => u.uid === uid)?.name ?? '—';
+    return this.users.kidLabel(this.users.list().find((u) => u.uid === uid));
   }
 
-  /** Cuentas que usan los datos de esta (no se puede convertir en "compartida" si otras dependen de ella). */
+  /** Cuentas de cuidadores que usan los datos de esta (no puede pasar a cuidar de otros niños si otras dependen de ella). */
   protected dependents(u: UserProfile): number {
-    return this.users.list().filter((x) => x.dataUid === u.uid).length;
+    return this.users.caregiversOf(u.uid).length;
+  }
+
+  protected readonly isCaregiver = isCaregiver;
+
+  protected hasKid(u: UserProfile, kid: string): boolean {
+    return isCaregiver(u) && childrenOf(u).includes(kid);
+  }
+
+  /** Nombres de los niños de una cuenta cuidadora, para la etiqueta. */
+  protected kidNames(u: UserProfile): string {
+    return childrenOf(u).map((k) => this.spaceName(k)).join(', ');
+  }
+
+  /** Marca o desmarca un niño. Sin ninguno marcado, la cuenta vuelve a ser un niño con datos propios. */
+  protected async toggleKid(u: UserProfile, kid: string, on: boolean): Promise<void> {
+    const cur = isCaregiver(u) ? childrenOf(u) : [];
+    const next = on ? [...new Set([...cur, kid])] : cur.filter((k) => k !== kid);
+    await this.update(u, { dataUid: next[0] ?? '', dataUids: next });
   }
 
   protected otherSpaces(u: UserProfile): UserProfile[] {
@@ -142,18 +163,24 @@ export class Usuarios implements OnInit {
     }
     this.busy.set(true);
     try {
-      await this.users.create(this.name, this.email, this.password, this.role, this.shareWith);
+      await this.users.create(this.name, this.email, this.password, this.role, this.shareWith, this.kidName);
       this.msg.set(
         `Cuenta creada para ${this.email.trim()}. Comparte la contraseña inicial de forma segura; puede cambiarla con «Restablecer contraseña».`,
       );
       this.name = this.email = this.password = '';
       this.role = 'user';
       this.shareWith = '';
+      this.kidName = '';
     } catch (e) {
       this.err.set(this.auth.explainCode(e));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  protected async rename(u: UserProfile, value: string): Promise<void> {
+    const name = value.trim();
+    if (name && name !== u.name) await this.update(u, { name });
   }
 
   protected async update(u: UserProfile, patch: Partial<UserProfile>): Promise<void> {

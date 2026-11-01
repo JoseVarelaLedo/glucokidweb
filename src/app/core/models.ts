@@ -171,6 +171,16 @@ export interface UserProfile {
    * Varias cuentas (padre, madre, abuela…) pueden apuntar al mismo niño.
    */
   dataUid?: string;
+  /**
+   * Todos los niños a los que accede la cuenta (p. ej. un abuelo con varios nietos). Si existe, `dataUid` es el primero
+   * (el predeterminado). Lo escribe el administrador desde Usuarios.
+   */
+  dataUids?: string[];
+  /**
+   * Nombre del niño cuyo espacio de datos es esta cuenta (p. ej. «Ana»). Es distinto del nombre de la persona dueña de la cuenta
+   * (`name`), que es el que sale en los avisos («Mamá ha registrado…»). Si falta, se usa `name`.
+   */
+  kidName?: string;
 }
 
 /** Invitación para que una persona cree su propia cuenta y comparta los datos de un niño (colección `invites`). */

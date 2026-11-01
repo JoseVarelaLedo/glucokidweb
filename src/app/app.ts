@@ -72,6 +72,6 @@ export class App implements OnInit {
   }
 
   protected viewingName(): string {
-    return this.users.spaces().find((u) => u.uid === this.data.viewUid())?.name ?? '';
+    return this.users.kidLabel(this.users.spaces().find((u) => u.uid === this.data.viewUid()));
   }
 }

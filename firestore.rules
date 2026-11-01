@@ -1,12 +1,12 @@
 rules_version = '2';
 
 // Modelo de seguridad:
-//  - users/{uid}            perfil: rol ('admin' | 'user'), 'active' y, opcionalmente, 'dataUid'.
+//  - users/{uid}            perfil: rol ('admin' | 'user'), 'active' y, opcionalmente, 'dataUid' y 'dataUids'.
 //  - users/{uid}/...        datos de un niño (días, ajustes, alimentos, documentos, avisos, dispositivos).
 //  - invites/{codigo}       invitaciones de alta (las crea un administrador; ver "altaPorInvitacion").
 //
 // 'dataUid' permite que VARIAS cuentas (padre, madre, abuela...) usen el espacio de datos
-// de un mismo niño: cada una entra con su propio correo y contraseña, y los avisos
+// de un mismo niño; 'dataUids' (lista) permite que UNA cuenta cuide de varios niños: cada una entra con su propio correo y contraseña, y los avisos
 // indican quién registró cada medición.
 //
 // Cada cuenta solo accede a su espacio (o al del niño con el que comparte);
@@ -33,10 +33,13 @@ service cloud.firestore {
     function esAdmin() {
       return activa() && perfil(request.auth.uid).role == 'admin';
     }
-    // ¿Esta cuenta puede usar el espacio de datos "uid"? (el suyo o el compartido)
+    // ¿Esta cuenta puede usar el espacio de datos "uid"? (el suyo, el compartido o uno de la lista 'dataUids',
+    // para quien cuida de varios niños, p. ej. unos abuelos con varios nietos)
     function esMiembro(uid) {
       return activa()
-        && (request.auth.uid == uid || perfil(request.auth.uid).get('dataUid', '') == uid);
+        && (request.auth.uid == uid
+            || perfil(request.auth.uid).get('dataUid', '') == uid
+            || uid in perfil(request.auth.uid).get('dataUids', []));
     }
 
     // Alta de una cuenta nueva con invitación. Solo se permite crear el PROPIO perfil, siempre como usuario normal

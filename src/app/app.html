@@ -82,13 +82,24 @@
               <label for="viewuser">Niño</label>
               <select id="viewuser" [value]="data.viewUid()" (change)="switchUser($any($event.target).value)">
                 @for (u of users.spaces(); track u.uid) {
-                  <option [value]="u.uid" [selected]="u.uid === data.viewUid()">{{ u.name }}{{ u.uid === auth.dataUid() ? ' (el mío)' : '' }}</option>
+                  <option [value]="u.uid" [selected]="u.uid === data.viewUid()">{{ users.kidLabel(u) }}{{ u.uid === auth.dataUid() ? ' (el mío)' : '' }}</option>
                 }
               </select>
             </section>
             @if (data.viewingOther()) {
               <p class="notice" role="status">Estás viendo y editando los datos de <strong>{{ viewingName() }}</strong>.</p>
             }
+          } @else if (auth.children().length > 1) {
+            <section class="card admin-bar">
+              <label for="viewkid">Niño</label>
+              <select id="viewkid" (change)="switchUser($any($event.target).value)">
+                @for (k of auth.children(); track k) {
+                  <option [value]="k" [selected]="k === data.viewUid()">{{ auth.childName(k) }}</option>
+                }
+              </select>
+            </section>
+          } @else if (auth.status() === 'signedIn') {
+            <p class="kid-strip">Datos de <strong>{{ auth.childName(data.viewUid()) }}</strong></p>
           }
           @if (alerts.list().length) {
             <section class="alerts" role="alert" aria-label="Avisos de los demás cuidadores">
