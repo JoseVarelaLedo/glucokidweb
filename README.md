@@ -38,6 +38,7 @@ Sin configurar Firebase funciona en **modo local**: los datos se guardan solo en
 - Los administradores no ven las contraseñas de nadie; pueden enviar un correo de restablecimiento.
 
 ## Configuración propia y repositorio
+
 Dos ficheros contienen la configuración de **tu** proyecto y **no se suben a Git** (están en `.gitignore`):
 
 | Fichero | Contiene | Plantilla (sí se sube) |
@@ -224,6 +225,16 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - Un alimento **sin hidratos en el catálogo** (0 g por 100 g: brócoli, pollo, aceite…) **no suma raciones**, aunque se anoten. Lo aplican el total «Anotado», la previsión de la curva,
   la comparación con las raciones previstas, las instantáneas y las raciones por día de Evolución. Un alimento que **no está en el catálogo** se cuenta tal como se anota, porque no se puede saber.
   Si le pones hidratos a un alimento en *Alimentos*, vuelve a contar.
+
+### La previsión: qué aprende y límites de seguridad
+
+- El **modelo predictivo no aprende**: es un cálculo fijo con los datos de *Ajustes* (factor de sensibilidad, raciones por unidad, tiempos de acción de la insulina y de absorción).
+  Lo que **sí aprende** es la corrección monitor–capilar (pestaña *Monitor*), y aun así no modifica la previsión: solo se contrasta. Los patrones por alimentos tampoco cambian el cálculo.
+  Las desviaciones entre lo medido y lo previsto se muestran para que se revisen los ajustes con el equipo médico, no se aplican solas.
+- **Límite de plausibilidad**: si con los datos anotados la previsión pasaría de **400 mg/dL** (`PRED_MAX_PLAUSIBLE` en `core/predict.ts`), no se dibuja. En su lugar se avisa de qué revisar
+  (raciones de más, dosis sin anotar o con otra hora, factor de sensibilidad o relación raciones/unidades en Ajustes).
+- **Hidratos sin dosis**: si una comida tiene hidratos pero **no hay unidades anotadas** (campo vacío), no se calcula previsión y se pide anotarlas (0 U si de verdad no se puso insulina).
+- Es informativo, no es un producto sanitario y no sustituye a la medición ni al equipo médico.
 
 ### Alimentos y glucemia (patrones)
 

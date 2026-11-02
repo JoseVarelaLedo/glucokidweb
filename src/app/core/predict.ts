@@ -189,6 +189,11 @@ export function carbAbsorbed(t: number, durationMin: number): number {
 /** mg/dL/min típicos de cada flecha del monitor. */
 const ARROW_RATE: Record<Arrow, number> = { up: 2.5, upRight: 1.5, flat: 0, downRight: -1.5, down: -2.5 };
 const MOMENTUM_TAU_MIN = 10;
+/**
+ * Una previsión por encima de esto (el techo de lectura de los sensores) no es creíble en un niño con insulina pautada: casi seguro hay un dato
+ * mal (dosis sin anotar, raciones de más, hora equivocada o factor de sensibilidad inadecuado). En ese caso no se dibuja ni se usa.
+ */
+export const PRED_MAX_PLAUSIBLE = 400;
 
 /* ------------------------------------------------------------------ */
 /* Eventos del día                                                      */
@@ -299,6 +304,8 @@ export interface Episode {
   meanDev: number | null;
   confidence: 'alta' | 'media' | 'baja';
   recs: Recommendation[];
+  /** Pico que habría salido si la previsión no se hubiera descartado por imposible (solo si se descartó). */
+  rawPeak?: number;
 }
 
 export interface MeasuredPoint {
@@ -445,6 +452,19 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
       continue;
     }
 
+    // --- Datos incoherentes: no se predice ---
+    const carbG = myCarbs.reduce((a, c) => a + c.grams, 0);
+    if (carbG > 0 && !myIns.length && m.before.units == null) {
+      recs.push({
+        level: 'atencion',
+        code: 'sin-dosis',
+        text: `${m.name}: hay hidratos anotados (≈ ${Math.round(carbG)} g) pero no hay dosis de insulina. Anota las unidades (y la hora) para ver la previsión; sin ellas saldría una subida que no es real. Si de verdad no se ha puesto insulina, anota 0 U.`,
+      });
+      ep.confidence = 'baja';
+      result.episodes.push(ep);
+      continue;
+    }
+
     // --- Curva ---
     const e0 = effect(events, t0, isf, gPerUnit, model, horizon);
     const rate = m.before.arrow ? ARROW_RATE[m.before.arrow] : 0;
@@ -457,6 +477,26 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
     ep.nadir = ep.points.reduce((a, b) => (b.g < a.g ? b : a));
     ep.peak = ep.points.reduce((a, b) => (b.g > a.g ? b : a));
     ep.endG = ep.points[ep.points.length - 1]?.g ?? null;
+
+    if (ep.peak.g > PRED_MAX_PLAUSIBLE) {
+      // Imposible con insulina pautada: se descarta la curva y se explica qué revisar, en vez de enseñar un valor alarmante e irreal.
+      ep.rawPeak = Math.round(ep.peak.g);
+      ep.points = [];
+      ep.nadir = null;
+      ep.peak = null;
+      ep.endG = null;
+      ep.confidence = 'baja';
+      recs.push({
+        level: 'atencion',
+        code: 'prevision-imposible',
+        text:
+          `${m.name}: con los datos anotados la previsión pasaría de ${PRED_MAX_PLAUSIBLE} mg/dL (≈ ${ep.rawPeak}), algo que no es creíble con la insulina puesta con regularidad, así que no se dibuja. ` +
+          `Casi seguro hay un dato por revisar: raciones de más (¿alguna de un alimento sin hidratos?), una dosis sin anotar o con la hora equivocada, o un factor de sensibilidad o una relación raciones/unidades en Ajustes que no corresponde. ` +
+          `Esto no es un aviso médico: si dudas de la glucemia real, mide.`,
+      });
+      result.episodes.push(ep);
+      continue;
+    }
 
     // --- Desviaciones frente a lo medido en este episodio ---
     for (const p of measured) {
