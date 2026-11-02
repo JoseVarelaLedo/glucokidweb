@@ -1,5 +1,6 @@
 import { Component, DoCheck, computed, inject, input, signal } from '@angular/core';
 import { DataService } from '../core/data.service';
+import { FoodPatterns, foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
 import { DayAnalysis, Level, PatternFinding, analyzeDay, analyzePatterns, fmtTime, mealCarbs } from '../core/predict';
 import { addDays, canon, fmtNum } from '../core/util';
@@ -75,6 +76,17 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
             <p class="rec" [class]="'rec ' + f.level"><span class="rec-ic" aria-hidden="true">{{ icon(f.level) }}</span> {{ f.text }}</p>
           }
           <p class="muted small">Basado en {{ p.daysUsed }} día(s) con mediciones tras las comidas.</p>
+          @if (food(); as fp) {
+            @if (!fp.findings.length) {
+              <p class="muted small">
+                Alimentos: {{ fp.episodes < 8 ? 'aún hay pocas comidas con alimentos y hora para buscar patrones por alimento.' : 'ningún alimento se repite con subidas o bajadas de glucemia de forma clara.' }}
+              </p>
+            }
+            <p class="muted small">
+              Alimentos: {{ fp.episodes }} comidas valoradas ({{ fp.hyper }} con glucemia por encima de 180 y {{ fp.hypo }} por debajo de 70 en las 4 h siguientes).
+              Son pistas, no causas: pueden influir la dosis, la cantidad, el ejercicio u otras cosas.
+            </p>
+          }
         }
       </div>
 
@@ -98,6 +110,7 @@ export class DayCurve implements DoCheck {
   protected readonly analysis = computed(() => this.a());
   protected readonly patterns = signal<{ findings: PatternFinding[]; daysUsed: number } | null>(null);
   protected readonly loadingPat = signal(false);
+  protected readonly food = signal<FoodPatterns | null>(null);
 
   private snap = '';
 
@@ -147,7 +160,18 @@ export class DayCurve implements DoCheck {
       const days = await this.data.getRange(addDays(to, -13), to);
       // el día actual puede tener cambios aún sin guardar: usamos la versión en pantalla
       const merged = [...days.filter((x) => x.date !== to), this.day()];
-      this.patterns.set(analyzePatterns(merged, this.data.settings(), this.data.foods()));
+      const base = analyzePatterns(merged, this.data.settings(), this.data.foods());
+      // además, alimentos que se repiten antes de subidas o bajadas de glucemia
+      const fp = foodPatterns(merged, this.data.foods());
+      const extra: PatternFinding[] = fp.findings.map((f) => ({
+        level: f.outcome === 'hipo' ? 'alerta' : 'atencion',
+        text: `${f.outcome === 'hipo' ? 'Bajadas' : 'Subidas'} · ${f.text}`,
+      }));
+      this.food.set(fp);
+      this.patterns.set({
+        daysUsed: base.daysUsed,
+        findings: extra.length ? [...base.findings.filter((f) => f.level !== 'ok'), ...extra] : base.findings,
+      });
     } finally {
       this.loadingPat.set(false);
     }

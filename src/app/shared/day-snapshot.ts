@@ -1,6 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, input, output } from '@angular/core';
 import { Activity, ARROWS, DayRecord, ExtraReading, Meal, Reading } from '../core/models';
+import { PRE_ID } from '../core/defaults';
 import { fmtNum } from '../core/util';
 import { DayCurve } from './day-curve';
 import { GlucoseBadge } from './glucose-badge';
@@ -45,6 +46,20 @@ const ARROW_SYMBOL: Record<string, string> = { up: '↑', upRight: '↗', flat: 
 
     @if (!hasData()) {
       <p class="muted center pad">No hay registros en este día.</p>
+    }
+
+    @for (x of preExtras(); track x.id) {
+      <div class="card snap-extra">
+        <strong>Medición de madrugada / antes del desayuno</strong>
+        <span class="muted small">{{ x.source === 'capilar' ? 'Capilar' : 'Monitor' }}</span>
+        <div class="snap-reading-line"><ng-container *ngTemplateOutlet="rd; context: { $implicit: x }" /></div>
+        @if (x.extraRations) {
+          <p class="small">Raciones adicionales: <strong>{{ fmt(x.extraRations) }}</strong></p>
+        }
+        @if (x.note) {
+          <p class="snap-note">{{ x.note }}</p>
+        }
+      </div>
     }
 
     @for (m of shownMeals(); track m.injectionId) {
@@ -187,6 +202,12 @@ export class DaySnapshot {
 
   protected rations(m: Meal): number {
     return m.items.reduce((acc, it) => acc + (typeof it.rations === 'number' ? it.rations : 0), 0);
+  }
+
+  protected preExtras(): ExtraReading[] {
+    return this.day()
+      .extras.filter((x) => x.afterInjectionId === PRE_ID)
+      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   }
 
   protected extrasFor(m: Meal): ExtraReading[] {

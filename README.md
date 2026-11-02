@@ -2,14 +2,13 @@
 
 Registro de glucemias, comidas y actividad física + calculadora de raciones e insulina rápida.
 Angular 20 · multiusuario con roles · móvil primero (con interruptor "Vista PC") · datos en Firebase (Firestore) · alojado en Netlify.
-La documentación se muestra para el despliegue en **Netlify**, para futuras evoluciones, de ser el caso, en la aplicación, se estudiaría un escalado a un hosting dimensionado a las necesidades que surjan.
 
 ## Probar en local
 
 ```bash
 npm install
 npm start          # http://localhost:4200
-o en su defecto
+# o, en su defecto:
 ng serve
 ```
 
@@ -76,6 +75,7 @@ si tienes dudas, hazlo **privado**.
 - `core/predict.ts` modelo predictivo (insulina activa, absorción de hidratos a partir de raciones, desviaciones, patrones).
 - `core/evolution.ts` estadísticas y tendencia por semana, mes y año.
 - `core/calibration.ts` y `core/calibration.service.ts` fiabilidad del monitor frente a las glucemias capilares.
+- `core/food-patterns.ts` alimentos que se repiten con subidas o bajadas de glucemia.
 - `core/libre-csv.ts` (lectura del CSV del monitor) y `core/libre-import.ts` (serie por día, unión sin duplicados, estadísticas); `shared/sensor-import.ts` es la pantalla de importación.
 - `core/foods-io.ts` importación y exportación del catálogo de alimentos en JSON.
 - `core/stores.ts` almacenamiento local y Firestore (`days/{fecha}`, `config/settings`, `config/foods`).
@@ -148,8 +148,7 @@ si tienes dudas, hazlo **privado**.
 
 - *Alimentos → Importar o exportar (JSON)*. El archivo lleva, de cada alimento, `name`, `group`, `gramsPerRation` (gramos del alimento que aportan
   una ración) y `carbsPer100g`; basta con uno de los dos últimos. Si vienen los dos y no coinciden, manda `carbsPer100g`.
-- La importación **valida y muestra una vista previa** (nuevos, actualizados, sin cambios y entradas descartadas con el motivo) antes de aplicar, y puede
-  *añadir y actualizar* o *reemplazar todo* (con confirmación). Se limita a 1 MB y 2000 alimentos.
+- La importación **valida y muestra una vista previa** (nuevos, actualizados, sin cambios y entradas descartadas con el motivo) antes de aplicar, y puede *añadir y actualizar* o *reemplazar todo* (con confirmación). Se limita a 1 MB y 2000 alimentos.
 
 ```json
 {
@@ -161,6 +160,27 @@ si tienes dudas, hazlo **privado**.
   ]
 }
 ```
+
+**Grupos de alimentos actuales** (`FOOD_GROUPS` en `core/defaults.ts`):
+
+- Azúcares y cacaos
+- Bebidas
+- Cereales, pasta y pan
+- Chuches
+- Legumbres
+- Hortalizas con hidratos
+- Fruta
+- Frutos secos
+- Lácteos
+- Postres
+- Proteínas y grasas (sin hidratos)
+- Repostería
+- Salsas
+- Verduras verdes (sin hidratos)
+- Otros
+
+Al importar, un grupo que no esté en la lista se acepta tal cual; si falta, el alimento va a «Otros». El grupo «Proteínas y grasas (sin hidratos)» se reconoce
+por su nombre (alarga la absorción en la curva prevista): si lo renombras, actualiza también `FAT_GROUP` en `core/predict.ts`.
 
 - La copia de seguridad completa (días, ajustes, alimentos y docs) sigue en *Ajustes → Copia de seguridad*.
 
@@ -188,6 +208,22 @@ si tienes dudas, hazlo **privado**.
 - Los «eventos» del sensor del archivo se ofrecen como posibles cambios de sensor, **sin marcar**: el archivo no indica con certeza qué son.
 - En las **mediciones intermedias**, la opción por defecto es ahora **Capilar** y después Monitor.
 - Cada día importado ocupa unos pocos KB (hasta 288 lecturas de 5 minutos); no hace falta cambiar las reglas de Firestore.
+
+### Mediciones de madrugada o antes del desayuno
+
+- En *Registro*, encima de la primera comida, el botón **«+ Medición antes del desayuno»** añade una medición previa (capilar por defecto, con hora, glucemia, flecha y nota).
+  Se guarda en el día (`afterInjectionId: "pre"`), no cuelga de ninguna administración y sale en la curva, en las estadísticas, en la fiabilidad del monitor y en las instantáneas de días cerrados.
+
+### Alimentos y glucemia (patrones)
+
+- Cálculo en `core/food-patterns.ts`. Para cada comida con alimentos y hora se miran las **4 h siguientes** (sin pasar de la comida siguiente, y sin contar los primeros 30 min)
+  y se anota si la glucemia **superó 180** o **bajó de 70** mg/dL. Se usan las mediciones anotadas y, si hay, la serie continua del sensor importada.
+- Después se compara cada alimento (y cada grupo de alimentos) con **el resto de las comidas**. Un alimento solo se señala si aparece **al menos 4 veces, en 3 días distintos**,
+  con **3 picos como mínimo**, en la mitad o más de sus comidas, y **de forma claramente peor** que el resto (cota inferior de Wilson al 90 %, para no señalar casualidades).
+- No se atribuye a la comida una subida si ya había hiperglucemia antes de comer, ni una bajada si ya había hipoglucemia antes o hubo actividad física cerca.
+- Aparece en el botón **«Buscar patrones en los últimos 14 días»** (junto a la curva del día) y en la tarjeta **«Alimentos y glucemia»** de Semana, Mes y Año.
+  Con pocos días suele no haber suficientes repeticiones: en el mes y el año se ve más.
+- Son **pistas, no causas**: influyen la dosis, la cantidad, la hora, el ejercicio y con qué se combina el alimento. Es informativo y no sustituye al equipo médico.
 
 ## Aviso
 

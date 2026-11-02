@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { Component, DoCheck, HostListener, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AlertsService } from '../../core/alerts.service';
@@ -8,7 +9,7 @@ import { LayoutService } from '../../core/layout.service';
 import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan } from '../../core/models';
 import { addDays, canon, fmtNum, isClosedDay, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
 import { AuthService } from '../../core/auth.service';
-import { emptyReading, planTotal } from '../../core/defaults';
+import { PRE_ID, emptyReading, planTotal } from '../../core/defaults';
 import { findFood } from '../../core/predict';
 import { Calendar } from '../../shared/calendar';
 import { FoodPicker } from '../../shared/food-picker';
@@ -35,7 +36,7 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport],
+  imports: [FormsModule, NgTemplateOutlet, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
@@ -380,10 +381,25 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
       .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   }
 
+  /** Mediciones de madrugada o previas al desayuno (no cuelgan de ninguna comida). */
+  protected preExtras(d: DayRecord): ExtraReading[] {
+    return d.extras
+      .filter((x) => x.afterInjectionId === PRE_ID)
+      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+  }
+
+  protected addPre(d: DayRecord): void {
+    this.pushExtra(d, PRE_ID);
+  }
+
   protected addExtra(d: DayRecord, m: Meal): void {
+    this.pushExtra(d, m.injectionId);
+  }
+
+  private pushExtra(d: DayRecord, afterInjectionId: string): void {
     d.extras.push({
       id: uid(),
-      afterInjectionId: m.injectionId,
+      afterInjectionId,
       source: 'capilar',
       time: this.isToday() ? nowTime() : '',
       value: null,

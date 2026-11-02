@@ -10,6 +10,7 @@ import {
   rangeOf,
   shiftAnchor,
 } from '../core/evolution';
+import { foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
 import { fmtNum, todayStr } from '../core/util';
 
@@ -246,6 +247,37 @@ const f0 = (n: number | null): string => (n === null ? '—' : Math.round(n).toL
             </table>
           </section>
 
+          <!-- Alimentos que se repiten con subidas o bajadas -->
+          @if (foodPat(); as fp) {
+            <section class="card evo-foods">
+              <h3>Alimentos y glucemia</h3>
+              @if (fp.findings.length) {
+                <ul class="food-findings">
+                  @for (f of fp.findings; track f.outcome + f.scope + f.name) {
+                    <li [class.low]="f.outcome === 'hipo'">
+                      <strong>{{ f.outcome === 'hipo' ? 'Bajadas' : 'Subidas' }}</strong> · {{ f.text }}
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="muted">
+                  @if (fp.episodes < 8) {
+                    Aún hay pocas comidas con alimentos y hora en este periodo para buscar patrones por alimento.
+                  } @else {
+                    Ningún alimento se repite con subidas o bajadas de glucemia de forma clara en este periodo.
+                  }
+                </p>
+              }
+              <p class="muted small">
+                {{ fp.episodes }} comidas valoradas en {{ fp.days }} {{ fp.days === 1 ? 'día' : 'días' }}: {{ fp.hyper }} con glucemia por encima de 180
+                y {{ fp.hypo }} por debajo de 70 en las 4 h siguientes@if (fp.usedSensor) { (con la serie continua del sensor donde se ha importado) }.
+                Un alimento solo se señala si aparece al menos 4 veces, en 3 días, y sale peor que el resto de las comidas.
+                @if (period() === 'semana') { En una semana suele haber pocas repeticiones: el mes y el año enseñan más. }
+                Son pistas, no causas: también influyen la dosis, la cantidad, el ejercicio y la hora. Coméntalo con el equipo médico antes de cambiar nada.
+              </p>
+            </section>
+          }
+
           <details class="chart-table card">
             <summary>Ver los valores en una tabla</summary>
             <table class="lines evo-table">
@@ -356,6 +388,10 @@ export class Evolution {
   }
 
   protected readonly stats = computed(() => computeStats(this.loaded()?.cur ?? []));
+  protected readonly foodPat = computed(() => {
+    const l = this.loaded();
+    return l ? foodPatterns(l.cur, this.data.foods()) : null;
+  });
   protected readonly trend = computed(() => buildTrend(this.period(), this.loaded()?.cur ?? [], this.loaded()?.prev ?? []));
   protected readonly buckets = computed<Bucket[]>(() => {
     const l = this.loaded();

@@ -80,7 +80,8 @@ export function findFood(name: string, foods: Food[]): Food | null {
   return cands[0] ?? null;
 }
 
-const FAT_GROUP = FOOD_GROUPS[5]; // 'Proteínas y grasas (sin hidratos)'
+// Por nombre y no por posición: así se pueden añadir o reordenar grupos sin romper la detección de grasas.
+const FAT_GROUP: string = FOOD_GROUPS.find((g) => g.startsWith('Proteínas y grasas')) ?? '';
 
 export interface MealCarbs {
   grams: number; // hidratos estimados

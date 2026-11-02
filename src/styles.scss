@@ -1971,3 +1971,23 @@ input[type='range'] {
 .sensor-stats {
   margin: 0.4rem 0;
 }
+
+/* Alimentos y glucemia (Evolución) */
+.evo-foods {
+  .food-findings {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+    li {
+      border-left: 4px solid var(--c-alta);
+      background: var(--surface);
+      border-radius: 8px;
+      padding: 0.5rem 0.7rem;
+      &.low {
+        border-left-color: var(--c-hipo);
+      }
+    }
+  }
+}

@@ -78,6 +78,9 @@ export function migrateSettings(s: Settings): boolean {
  * Las mediciones intermedias ya no cuelgan de la insulina lenta: se reasignan a la
  * última comida de rápida anterior ("Mediciones post cena"). Se aplica al leer un día.
  */
+/** Identificador de las mediciones previas a la primera comida (madrugada o antes del desayuno): no cuelgan de ninguna administración. */
+export const PRE_ID = 'pre';
+
 export function normalizeExtras(day: DayRecord): void {
   for (const x of day.extras) {
     const idx = day.meals.findIndex((m) => m.injectionId === x.afterInjectionId);
@@ -134,17 +137,26 @@ export function syncDay(day: DayRecord, s: Settings, today: string): DayRecord {
 }
 
 export const FOOD_GROUPS = [
+  'Azúcares y cacaos',
+  'Bebidas',
   'Cereales, pasta y pan',
+  'Chuches',
   'Legumbres',
   'Hortalizas con hidratos',
   'Fruta',
+  'Frutos secos',
   'Lácteos',
+  'Postres',
   'Proteínas y grasas (sin hidratos)',
+  'Repostería',
+  'Salsas',
   'Verduras verdes (sin hidratos)',
   'Otros',
 ] as const;
 
-const [CER, LEG, HOR, FRU, LAC, PRO, VER] = FOOD_GROUPS;
+// Mismo orden que FOOD_GROUPS. Algunas constantes aún no se usan en los alimentos por defecto, pero se dejan para cuando se añadan.
+const [AZ, BEB, CER, CHU, LEG, HOR, FRU, FRSEC, LAC, POS, PRO, REP, SAL, VER] = FOOD_GROUPS;
+void [AZ, BEB, CHU, FRSEC, POS, REP, SAL]; // evita el aviso de «variable sin usar»
 
 const f = (id: string, name: string, group: string, carbsPer100g: number): Food => ({ id, name, group, carbsPer100g });
 

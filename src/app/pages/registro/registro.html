@@ -64,6 +64,35 @@
           <button type="button" class="btn small" (click)="relock()">Volver a bloquear</button>
         </section>
       }
+      <ng-template #extraCard let-x let-title="title">
+                <div class="card extra">
+                  <div class="row between">
+                    <strong>{{ title }}</strong>
+                    <button type="button" class="icon-btn danger" (click)="removeExtra(d, x)" aria-label="Eliminar medición">×</button>
+                  </div>
+                  <div class="seg" role="radiogroup" aria-label="Tipo de medición">
+                    <button type="button" role="radio" [class.on]="x.source === 'capilar'" [attr.aria-checked]="x.source === 'capilar'" (click)="x.source = 'capilar'">Capilar</button>
+                    <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
+                  </div>
+                  <app-reading-editor [reading]="x" [hintDate]="x.source === 'capilar' ? '' : date()" />
+                  <div class="field">
+                    <label [attr.for]="'xr-' + x.id">Raciones adicionales <small>(si ha tomado algo)</small></label>
+                    <input [id]="'xr-' + x.id" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" [(ngModel)]="x.extraRations" />
+                  </div>
+                  <div class="field">
+                    <label [attr.for]="'xn-' + x.id">Nota</label>
+                    <textarea [id]="'xn-' + x.id" rows="2" placeholder="Incidencias, qué ha tomado, cómo se encontraba…" [(ngModel)]="x.note"></textarea>
+                  </div>
+                </div>
+      </ng-template>
+
+      <section class="pre-meal extras" aria-label="Mediciones de madrugada o antes del desayuno">
+        @for (x of preExtras(d); track x.id) {
+          <ng-container *ngTemplateOutlet="extraCard; context: { $implicit: x, title: 'Medición de madrugada / antes del desayuno' }" />
+        }
+        <button type="button" class="btn ghost" (click)="addPre(d)">+ Medición antes del desayuno</button>
+      </section>
+
       <div class="meals">
         @for (m of d.meals; track m.injectionId) {
           <article class="block">
@@ -158,25 +187,7 @@
             @if (canHaveExtras(m)) {
             <div class="extras">
               @for (x of extrasFor(d, m); track x.id) {
-                <div class="card extra">
-                  <div class="row between">
-                    <strong>Medición post {{ m.name.toLowerCase() }}</strong>
-                    <button type="button" class="icon-btn danger" (click)="removeExtra(d, x)" aria-label="Eliminar medición">×</button>
-                  </div>
-                  <div class="seg" role="radiogroup" aria-label="Tipo de medición">
-                    <button type="button" role="radio" [class.on]="x.source === 'capilar'" [attr.aria-checked]="x.source === 'capilar'" (click)="x.source = 'capilar'">Capilar</button>
-                    <button type="button" role="radio" [class.on]="x.source === 'monitor'" [attr.aria-checked]="x.source === 'monitor'" (click)="x.source = 'monitor'">Monitor</button>
-                  </div>
-                  <app-reading-editor [reading]="x" [hintDate]="x.source === 'capilar' ? '' : date()" />
-                  <div class="field">
-                    <label [attr.for]="'xr-' + x.id">Raciones adicionales <small>(si ha tomado algo)</small></label>
-                    <input [id]="'xr-' + x.id" type="number" inputmode="decimal" min="0" step="0.5" placeholder="0" [(ngModel)]="x.extraRations" />
-                  </div>
-                  <div class="field">
-                    <label [attr.for]="'xn-' + x.id">Nota</label>
-                    <textarea [id]="'xn-' + x.id" rows="2" placeholder="Incidencias, qué ha tomado, cómo se encontraba…" [(ngModel)]="x.note"></textarea>
-                  </div>
-                </div>
+                <ng-container *ngTemplateOutlet="extraCard; context: { $implicit: x, title: 'Medición post ' + m.name.toLowerCase() }" />
               }
               <button type="button" class="btn ghost" (click)="addExtra(d, m)">+ Medición post {{ m.name.toLowerCase() }}</button>
             </div>
