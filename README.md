@@ -4,15 +4,18 @@ Registro de glucemias, comidas y actividad física + calculadora de raciones e i
 Angular 20 · multiusuario con roles · móvil primero (con interruptor "Vista PC") · datos en Firebase (Firestore) · alojado en Netlify.
 
 ## Probar en local
+
 ```bash
 npm install
 npm start          # http://localhost:4200
 # o, en su defecto:
 ng serve
 ```
+
 Sin configurar Firebase funciona en **modo local**: los datos se guardan solo en el navegador del dispositivo.
 
 ## Activar Firebase (datos sincronizados, varios usuarios y roles)
+
 1. [console.firebase.google.com](https://console.firebase.google.com) → crear proyecto.
 2. **Firestore Database** → crear base de datos (región europea, p. ej. `eur3`).
 3. **Authentication** → método *Correo/contraseña* → activar.
@@ -26,6 +29,7 @@ Sin configurar Firebase funciona en **modo local**: los datos se guardan solo en
 7. Entra en la app con esa cuenta: en **Usuarios** puedes crear el resto (un usuario por niño, o los que queráis) y ver los datos de cualquiera con el selector «Niño».
 
 ### Seguridad
+
 - Las contraseñas las gestiona Firebase Authentication (guardadas con hash, nunca en claro).
 - Firestore cifra los datos en tránsito (HTTPS) y en reposo.
 - Cada usuario solo lee y escribe `users/{su uid}/…` (sus días, su catálogo de alimentos y sus ajustes); los administradores acceden a todos. Esto lo imponen las **reglas de Firestore en el servidor**, no la interfaz.
@@ -43,6 +47,7 @@ Dos ficheros contienen la configuración de **tu** proyecto y **no se suben a Gi
 
 No son secretos (la seguridad la dan el inicio de sesión y las reglas de Firestore), pero identifican tu proyecto.
 Hay dos formas de tenerlos:
+
 - **En tu equipo**: copia cada `*.example.ts` quitando `.example` y rellena los valores.
 - **Generados automáticamente**: `scripts/write-config.mjs` (se ejecuta solo antes de `npm start` y `npm run build`) los crea desde
   variables de entorno **solo si no existen**. Así funciona Netlify. Variables: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
@@ -55,6 +60,7 @@ de Netlify), ficheros `.env` y las copias de seguridad descargadas desde Ajustes
 si tienes dudas, hazlo **privado**.
 
 ## Desplegar en Netlify
+
 - **Con GitHub (recomendado)**: sigue `GITHUB-NETLIFY.md` (subir el repositorio, enlazarlo con Netlify, variables de entorno y dominio autorizado en Firebase).
   `netlify.toml` ya define el build `npm run build`, la carpeta `dist/glucokid/browser`, la redirección SPA y la función de avisos.
 - Sin Git: `npm run build` y arrastrar la carpeta `dist/glucokid/browser` a Netlify Drop (añade también un fichero `_redirects` con
@@ -62,6 +68,7 @@ si tienes dudas, hazlo **privado**.
 - En Firebase → Authentication → *Settings → Authorized domains*, añadir el dominio de Netlify.
 
 ## Estructura
+
 - `core/glucose.ts` reglas de clasificación (hipo, tendencias, estable, hiper).
 - `core/dose.ts` cálculo de dosis (preparado para añadir factores de corrección como `DoseAdjustment`).
 - `core/predict.ts` modelo predictivo (insulina activa, absorción de hidratos a partir de raciones, desviaciones, patrones).
@@ -80,6 +87,7 @@ si tienes dudas, hazlo **privado**.
 - `netlify/functions/` función que envía los avisos push.
 
 ## Novedades de esta versión
+
 - **Media mañana** opcional entre desayuno y comida; las mediciones posteriores a la insulina lenta desaparecen
   (las intermedias son «Mediciones post desayuno/comida/…» y admiten nota y raciones adicionales).
 - **Ajustes**: calorías diarias (% de hidratos), insulina diaria rápida/lenta y cálculo del factor de sensibilidad
@@ -100,11 +108,13 @@ si tienes dudas, hazlo **privado**.
 ## Novedades desde la v2.0.0
 
 ### Varios niños por cuenta
+
 - Una cuenta puede acceder a **varios niños** (p. ej. unos abuelos con varios nietos): **Usuarios → «Niños a los que accede»**. Cada niño se identifica por su
   **nombre de niño** (`kidName`, distinto del nombre de la persona de la cuenta; se edita en *Usuarios*); la cuenta ve un selector **Niño** (o «Datos de Ana» si solo es uno). Los avisos push llegan de todos sus niños e indican de cuál. Ver `NUEVO-NINO.md`.
 - Requiere **publicar las reglas de `firestore.rules`** (nuevo campo `dataUids` en el perfil) y volver a desplegar la función de avisos.
 
 ### Raciones
+
 - **Raciones previstas por comida** (harinas, verduras, fruta) configurables en *Ajustes*; se muestran como leyenda en el registro y en la calculadora.
 - En el registro, cada alimento se anota en **raciones** (con medias raciones); el modelo predictivo parte de ellas para calcular la desviación
   y las propuestas de corrección. Los registros antiguos con texto libre («200 g») siguen contando mediante el catálogo.
@@ -112,6 +122,7 @@ si tienes dudas, hazlo **privado**.
   sigue siendo «hidratos por 100 g»; los gramos por ración se derivan de ahí y se recalculan en ambos sentidos.
 
 ### Días pasados cerrados
+
 - Un día anterior se abre como **instantánea de solo lectura**: mediciones, comidas y raciones, insulina, mediciones post-comida con sus notas,
   actividad con incidencias y curva de glucemia.
 - Hay un margen tras la medianoche (3 h por defecto) para completar la última medición; se cambia con `CLOSE_GRACE_HOURS` en `core/util.ts`
@@ -120,10 +131,12 @@ si tienes dudas, hazlo **privado**.
 - El bloqueo es **de la interfaz**: las reglas de Firestore no lo imponen.
 
 ### Selector de alimentos
+
 - En ordenador, desplegable con **búsqueda** (sin distinguir acentos, con teclado y ratón, agrupado por tipo de alimento).
 - En móviles y tabletas (puntero táctil) se usa el **selector nativo** del sistema, agrupado, con la opción «Otro alimento (escribir)…» en el registro.
 
 ### Evolución por semana, mes y año
+
 - En *Registro* hay pestañas **Día · Semana · Mes · Año · Monitor**. Semana (lunes a domingo), mes y año naturales, con navegación entre periodos.
 - Resumen de **tendencia** frente al periodo anterior (mejora, empeora o estable según el % de mediciones en rango, con avisos sobre hipoglucemias,
   variabilidad y cambio de la media), indicadores (mediciones, media, % en rango, hipoglucemias, variabilidad, insulina rápida y lenta diaria),
@@ -131,10 +144,12 @@ si tienes dudas, hazlo **privado**.
 - Solo es informativo: las mediciones son puntuales, no un monitor continuo. La vista de año lee los registros de dos años (unos 700 documentos).
 
 ### Alimentos en JSON
+
 - *Alimentos → Importar o exportar (JSON)*. El archivo lleva, de cada alimento, `name`, `group`, `gramsPerRation` (gramos del alimento que aportan
   una ración) y `carbsPer100g`; basta con uno de los dos últimos. Si vienen los dos y no coinciden, manda `carbsPer100g`.
 - La importación **valida y muestra una vista previa** (nuevos, actualizados, sin cambios y entradas descartadas con el motivo) antes de aplicar, y puede
   *añadir y actualizar* o *reemplazar todo* (con confirmación). Se limita a 1 MB y 2000 alimentos.
+
 ```json
 {
   "app": "glucokid-alimentos",
@@ -170,6 +185,7 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - La copia de seguridad completa (días, ajustes, alimentos y docs) sigue en *Ajustes → Copia de seguridad*.
 
 ### Fiabilidad del monitor frente al capilar
+
 - Pestaña **Monitor** del registro. Cada capilar con una lectura del monitor a menos de 10 minutos forma un **par**; de los pares se aprende, con
   estadística robusta y prudente, cuánto y en qué condiciones difiere el monitor del capilar (nivel de glucemia, flecha de tendencia y **día de vida del sensor**).
 - **Cambio de sensor**: se anota la fecha en la pestaña Monitor (se guarda en `settings.sensors`); el registro muestra «sensor día N».
@@ -181,6 +197,7 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - Es informativo: no sustituye al capilar ni a la valoración del equipo médico, y nunca modifica ni oculta un aviso de hipoglucemia del monitor.
 
 ### Importar el CSV del sensor
+
 - Pestaña **Monitor → Importar datos del sensor**. Se sube el CSV de glucosa que se descarga de la web del monitor (FreeStyle Libre / LibreView, en español o inglés;
   UTF-8 o Windows-1252; mg/dL o mmol/L). Se puede repetir cada semana: **importar el mismo archivo dos veces no cambia nada**.
 - Solo se importa el **historial continuo**. Se guarda como una serie por día (`sensor` dentro del documento del día, pares `[minuto, mg/dL]`) y se dibuja como una
@@ -196,10 +213,20 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - Cada día importado ocupa unos pocos KB (hasta 288 lecturas de 5 minutos); no hace falta cambiar las reglas de Firestore.
 
 ### Mediciones de madrugada o antes del desayuno
+
 - En *Registro*, encima de la primera comida, el botón **«+ Medición antes del desayuno»** añade una medición previa (capilar por defecto, con hora, glucemia, flecha y nota).
   Se guarda en el día (`afterInjectionId: "pre"`), no cuelga de ninguna administración y sale en la curva, en las estadísticas, en la fiabilidad del monitor y en las instantáneas de días cerrados.
 
+### Flecha opcional y alimentos sin hidratos
+
+- En cada administración solo son obligatorias la **hora**, la **glucemia** y las **unidades**. La **flecha** del monitor es opcional (un capilar no la tiene, y la glucemia
+  puede anotarse después leyéndola de la gráfica). Sin flecha, la lectura se clasifica solo por su valor.
+- Un alimento **sin hidratos en el catálogo** (0 g por 100 g: brócoli, pollo, aceite…) **no suma raciones**, aunque se anoten. Lo aplican el total «Anotado», la previsión de la curva,
+  la comparación con las raciones previstas, las instantáneas y las raciones por día de Evolución. Un alimento que **no está en el catálogo** se cuenta tal como se anota, porque no se puede saber.
+  Si le pones hidratos a un alimento en *Alimentos*, vuelve a contar.
+
 ### Alimentos y glucemia (patrones)
+
 - Cálculo en `core/food-patterns.ts`. Para cada comida con alimentos y hora se miran las **4 h siguientes** (sin pasar de la comida siguiente, y sin contar los primeros 30 min)
   y se anota si la glucemia **superó 180** o **bajó de 70** mg/dL. Se usan las mediciones anotadas y, si hay, la serie continua del sensor importada.
 - Después se compara cada alimento (y cada grupo de alimentos) con **el resto de las comidas**. Un alimento solo se señala si aparece **al menos 4 veces, en 3 días distintos**,
@@ -210,4 +237,5 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - Son **pistas, no causas**: influyen la dosis, la cantidad, la hora, el ejercicio y con qué se combina el alimento. Es informativo y no sustituye al equipo médico.
 
 ## Aviso
+
 Los valores de hidratos precargados son orientativos y editables; contrastadlos con la tabla de vuestro equipo de endocrinología. La app es una ayuda, no sustituye su criterio.

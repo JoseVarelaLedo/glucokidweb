@@ -1,5 +1,7 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
+import { DataService } from '../core/data.service';
+import { mealRations } from '../core/predict';
 import { Activity, ARROWS, DayRecord, ExtraReading, Meal, Reading } from '../core/models';
 import { PRE_ID } from '../core/defaults';
 import { fmtNum } from '../core/util';
@@ -168,6 +170,7 @@ const ARROW_SYMBOL: Record<string, string> = { up: '↑', upRight: '↗', flat: 
   `,
 })
 export class DaySnapshot {
+  private readonly data = inject(DataService);
   readonly day = input.required<DayRecord>();
   readonly gramsPerRation = input(10);
   /** Solo los administradores pueden reabrir un día cerrado. */
@@ -200,8 +203,9 @@ export class DaySnapshot {
     return `${txt} ${n === 1 ? 'ración' : 'raciones'}`;
   }
 
+  /** Raciones de hidratos (los alimentos sin hidratos no suman). */
   protected rations(m: Meal): number {
-    return m.items.reduce((acc, it) => acc + (typeof it.rations === 'number' ? it.rations : 0), 0);
+    return mealRations(m, this.data.foods());
   }
 
   protected preExtras(): ExtraReading[] {

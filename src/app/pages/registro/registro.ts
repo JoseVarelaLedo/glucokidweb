@@ -10,7 +10,7 @@ import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan
 import { addDays, canon, fmtNum, isClosedDay, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
 import { AuthService } from '../../core/auth.service';
 import { PRE_ID, emptyReading, planTotal } from '../../core/defaults';
-import { findFood } from '../../core/predict';
+import { findFood, mealRations } from '../../core/predict';
 import { Calendar } from '../../shared/calendar';
 import { FoodPicker } from '../../shared/food-picker';
 import { DayCurve } from '../../shared/day-curve';
@@ -251,13 +251,12 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
     );
   }
 
-  /** Las 4 lecturas obligatorias: hora, glucemia, flecha y unidades. */
+  /** Lo obligatorio de una administración: hora, glucemia y unidades. La flecha es opcional (puede anotarse a posteriori o ser un capilar). */
   protected missing(m: Meal): string[] {
     const out: string[] = [];
     if (this.isIdleOptional(m)) return out;
     if (!m.before.time) out.push('hora');
     if (m.before.value === null) out.push('glucemia');
-    if (!m.before.arrow) out.push('flecha');
     if (m.before.units === null) out.push('unidades');
     return out;
   }
@@ -350,14 +349,15 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
     const f = findFood(it.name ?? '', this.data.foods());
     if (!f) return null;
     const g = this.foodRationGrams(f);
-    if (g === null) return `${f.name}: sin hidratos`;
+    if (g === null) return `${f.name}: sin hidratos, no suma raciones.`;
     let t = `1 ración de ${f.name} = ${fmtNum(g, 0)} g`;
     if (typeof it.rations === 'number' && it.rations > 0 && it.rations !== 1) t += ` · ${this.rationLabel(it.rations)} ≈ ${fmtNum(it.rations * g, 0)} g`;
     return t;
   }
 
+  /** Raciones de hidratos de la comida (los alimentos sin hidratos del catálogo, como el brócoli, no suman). */
   protected rationsTotal(m: Meal): number {
-    return m.items.reduce((acc, it) => acc + (typeof it.rations === 'number' ? it.rations : 0), 0);
+    return mealRations(m, this.data.foods());
   }
 
   protected gramsPerRation(): number {

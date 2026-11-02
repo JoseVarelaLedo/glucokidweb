@@ -83,6 +83,24 @@ export function findFood(name: string, foods: Food[]): Food | null {
 // Por nombre y no por posición: así se pueden añadir o reordenar grupos sin romper la detección de grasas.
 const FAT_GROUP: string = FOOD_GROUPS.find((g) => g.startsWith('Proteínas y grasas')) ?? '';
 
+/**
+ * Alimento del catálogo sin hidratos (0 g por 100 g, como el brócoli, el pollo o el aceite): sus raciones no aportan hidratos
+ * y no cuentan en ninguna suma. Un alimento que no está en el catálogo se cuenta tal cual lo anotado (no se puede saber).
+ */
+export function isCarbFree(name: string | null | undefined, foods: Food[]): boolean {
+  const f = findFood(name ?? '', foods);
+  return !!f && f.carbsPer100g <= 0;
+}
+
+/** Raciones de hidratos de una comida: las anotadas, sin las de alimentos sin hidratos. */
+export function mealRations(meal: Meal, foods: Food[]): number {
+  let n = 0;
+  for (const it of meal.items ?? []) {
+    if (typeof it.rations === 'number' && Number.isFinite(it.rations) && !isCarbFree(it.name, foods)) n += it.rations;
+  }
+  return n;
+}
+
 export interface MealCarbs {
   grams: number; // hidratos estimados
   /** Raciones anotadas directamente en los alimentos (las que llevan raciones, no las antiguas en gramos). */
@@ -108,6 +126,8 @@ export function mealCarbs(meal: Meal, foods: Food[], gPerRation = 10): MealCarbs
     if (!name) continue;
     const f = findFood(name, foods);
     if (f?.group === FAT_GROUP) hasFat = true;
+    // sin hidratos en el catálogo: no suma nada, ni siquiera con raciones anotadas
+    if (f && f.carbsPer100g <= 0) continue;
     if (typeof it.rations === 'number' && Number.isFinite(it.rations) && it.rations >= 0) {
       rations += it.rations;
       grams += it.rations * gPerRation;

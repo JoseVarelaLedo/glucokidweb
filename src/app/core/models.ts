@@ -9,7 +9,7 @@ export interface Reading {
   arrow: Arrow | null;
 }
 
-/** Las 4 lecturas obligatorias de cada administración: hora, glucemia, flecha y unidades. */
+/** Lecturas de cada administración: hora, glucemia y unidades son obligatorias; la flecha es opcional. */
 export interface MealReading extends Reading {
   units: number | null;
 }

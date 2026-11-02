@@ -36,8 +36,8 @@ let nextId = 0;
           [(ngModel)]="reading().value"
         />
       </div>
-      <div class="field" [class.missing]="required() && !reading().arrow">
-        <span class="label">Flecha @if (required()) {<span class="req">*</span>}</span>
+      <div class="field">
+        <span class="label">Flecha <small>(opcional)</small></span>
         <app-arrow-picker [(arrow)]="reading().arrow" />
       </div>
     </div>

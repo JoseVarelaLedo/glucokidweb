@@ -31,3 +31,8 @@ git tag -d v.2.5.0
 git tag -a v2.5.0 -m "Añadido campo nombre niño como alias"
 git push origin v2.5.0
 ```
+
+## Ver etiquetas
+
+`git tag -n`
+`git show vx.x.x`

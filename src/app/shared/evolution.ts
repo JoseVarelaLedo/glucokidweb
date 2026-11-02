@@ -12,6 +12,7 @@ import {
 } from '../core/evolution';
 import { foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
+import { isCarbFree } from '../core/predict';
 import { fmtNum, todayStr } from '../core/util';
 
 const W = 640;
@@ -378,7 +379,17 @@ export class Evolution {
       const p = rangeOf(period, shiftAnchor(period, anchor, -1));
       const [cur, prev] = await Promise.all([this.data.getRange(r.from, r.to), this.data.getRange(p.from, p.to)]);
       if (my !== this.token) return;
-      this.loaded.set({ cur, prev, key: `${period}|${anchor}` });
+      const foods = this.data.foods();
+      // para las estadísticas de raciones por día, los alimentos sin hidratos (brócoli…) no cuentan
+      const clean = (days: DayRecord[]): DayRecord[] =>
+        days.map((d) => ({
+          ...d,
+          meals: (d.meals ?? []).map((m) => ({
+            ...m,
+            items: (m.items ?? []).map((it) => (typeof it.rations === 'number' && isCarbFree(it.name, foods) ? { ...it, rations: 0 } : it)),
+          })),
+        }));
+      this.loaded.set({ cur: clean(cur), prev: clean(prev), key: `${period}|${anchor}` });
     } catch (e) {
       if (my !== this.token) return;
       this.error.set('No se han podido cargar los registros. ' + (e instanceof Error ? e.message : ''));
