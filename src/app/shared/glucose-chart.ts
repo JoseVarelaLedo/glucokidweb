@@ -39,6 +39,37 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
   ejercicio: 'Ejercicio',
 };
 
+interface ScrubView {
+  x: number;
+  y: number;
+  bx: number;
+  by: number;
+  g: number;
+  time: string;
+  color: string;
+}
+
+interface ChartView {
+  x: (t: number) => number;
+  y: (g: number) => number;
+  scrub: Array<{ t: number; g: number }>;
+  t0: number;
+  t1: number;
+}
+
+/** Índice del punto más cercano a t en una lista ordenada por t (-1 si está vacía). */
+function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
+  if (!a.length) return -1;
+  let lo = 0;
+  let hi = a.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (a[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo > 0 && Math.abs(a[lo - 1].t - t) <= Math.abs(a[lo].t - t) ? lo - 1 : lo;
+}
+
 @Component({
   selector: 'app-glucose-chart',
   template: `
@@ -48,9 +79,15 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
       } @else {
         <svg
           class="gchart"
+          [class.scrubbable]="g.scrub.length > 0"
           [attr.viewBox]="'0 0 ' + W + ' ' + H"
-          role="img"
+          [attr.role]="g.scrub.length ? 'group' : 'img'"
+          [attr.tabindex]="g.scrub.length ? 0 : null"
           aria-label="Curva de glucemia del día con las mediciones, las dosis y la evolución prevista"
+          (pointerdown)="onPointer($event, g)"
+          (pointermove)="onPointer($event, g)"
+          (pointerleave)="onLeave($event)"
+          (keydown)="onKey($event, g)"
         >
           <!-- zonas -->
           <rect [attr.x]="M.l" [attr.y]="g.y(g.yMax)" [attr.width]="W - M.l - M.r" [attr.height]="g.y(180) - g.y(g.yMax)" class="z-high" />
@@ -104,7 +141,28 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
               }
             }
           }
+
+          <!-- punto que recorre la curva -->
+          @if (scrubAt(g); as c) {
+            <line [attr.x1]="c.x" [attr.x2]="c.x" [attr.y1]="M.t" [attr.y2]="H - M.b" class="scrub-line" />
+            <circle [attr.cx]="c.x" [attr.cy]="c.y" r="7" [attr.fill]="c.color" class="scrub-dot" />
+            <g [attr.transform]="'translate(' + c.bx + ' ' + c.by + ')'" class="scrub-tip">
+              <rect width="150" height="46" rx="8" />
+              <text x="75" y="19" text-anchor="middle" class="scrub-time">{{ c.time }}</text>
+              <text x="75" y="39" text-anchor="middle" class="scrub-val">{{ c.g }} mg/dL</text>
+            </g>
+          }
         </svg>
+
+        @if (g.scrub.length) {
+          <p class="muted small scrub-hint" [attr.aria-live]="'polite'">
+            @if (scrubAt(g); as c) {
+              <strong>{{ c.time }}</strong> · {{ c.g }} mg/dL · sensor
+            } @else {
+              Desliza el dedo o el ratón por la gráfica (o usa las flechas del teclado) para ver la hora y el valor.
+            }
+          </p>
+        }
 
         <div class="chart-legend">
           @if (g.sensorPaths.length) {
@@ -171,6 +229,59 @@ export class GlucoseChart {
     const a = this.analysis();
     return i === null ? null : (a.measured[i] ?? null);
   });
+
+  /** Punto de la curva que se está recorriendo (índice en `scrub`). */
+  private readonly scrubIdx = signal<number | null>(null);
+
+  /** Posición, color y recuadro del punto recorrido (null si no hay ninguno). */
+  protected scrubAt(g: ChartView): ScrubView | null {
+    const i = this.scrubIdx();
+    const p = i === null ? null : g.scrub[i];
+    if (!p) return null;
+    const x = g.x(p.t);
+    const y = g.y(p.g);
+    const cls = classify(p.g, null)?.cls ?? 'enRango';
+    // el recuadro va a un lado del punto y se da la vuelta cerca de los bordes
+    const bx = x + 14 + 150 > W - M.r ? x - 14 - 150 : x + 14;
+    const by = Math.min(Math.max(y - 23, M.t + 2), H - M.b - 48);
+    return { x, y, bx, by, g: p.g, time: fmtTime(p.t), color: CLS_COLOR[cls] };
+  }
+
+  protected onPointer(ev: PointerEvent, g: ChartView): void {
+    if (!g.scrub.length) return;
+    const svg = ev.currentTarget as SVGSVGElement;
+    const r = svg.getBoundingClientRect();
+    if (!r.width) return;
+    // si solo se pasa el ratón se sigue el puntero; con dedo o ratón pulsado, también
+    if (ev.pointerType === 'mouse' && ev.type === 'pointerdown') svg.setPointerCapture?.(ev.pointerId);
+    // eventos fuera del gráfico (p. ej. un movimiento de ratón que genera el navegador al hacer scroll) no cambian nada
+    if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) return;
+    const xs = ((ev.clientX - r.left) / r.width) * W;
+    const t = g.t0 + ((xs - M.l) / (W - M.l - M.r)) * (g.t1 - g.t0);
+    const i = nearest(g.scrub, t);
+    // si en ese punto no hay lectura (sensor apagado o sin datos) no se enseña nada
+    this.scrubIdx.set(i >= 0 && Math.abs(g.scrub[i].t - t) <= 20 ? i : null);
+  }
+
+  protected onLeave(ev: PointerEvent): void {
+    // con el dedo el punto se queda donde se soltó; con el ratón desaparece al salir
+    if (ev.pointerType === 'mouse') this.scrubIdx.set(null);
+  }
+
+  protected onKey(ev: KeyboardEvent, g: ChartView): void {
+    const n = g.scrub.length;
+    if (!n) return;
+    const cur = this.scrubIdx();
+    let next: number | null = cur;
+    if (ev.key === 'ArrowRight') next = cur === null ? 0 : Math.min(n - 1, cur + (ev.shiftKey ? 12 : 1));
+    else if (ev.key === 'ArrowLeft') next = cur === null ? n - 1 : Math.max(0, cur - (ev.shiftKey ? 12 : 1));
+    else if (ev.key === 'Home') next = 0;
+    else if (ev.key === 'End') next = n - 1;
+    else if (ev.key === 'Escape') next = null;
+    else return;
+    ev.preventDefault();
+    this.scrubIdx.set(next);
+  }
 
   protected pick(i: number): void {
     this.selIdx.update((c) => (c === i ? null : i));
@@ -246,6 +357,9 @@ export class GlucoseChart {
       doses.push({ x: dx, row, text: `${lenta ? 'L' : 'R'} ${d.units.toLocaleString('es-ES')} U` });
     }
 
-    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, doses, measured, sensorPaths };
+    // lo que se puede recorrer: la serie continua del sensor y, si no la hay, las mediciones anotadas
+    const scrub: Array<{ t: number; g: number }> = sp.length ? sp : [...measured].sort((a, b) => a.t - b.t).map((p) => ({ t: p.t, g: p.g }));
+
+    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, doses, measured, sensorPaths, scrub, t0, t1 };
   });
 }

@@ -1991,3 +1991,50 @@ input[type='range'] {
     }
   }
 }
+
+/* Punto que recorre la curva del sensor */
+.gchart.scrubbable {
+  touch-action: pan-y; /* el scroll vertical de la página sigue funcionando; el horizontal mueve el punto */
+  cursor: crosshair;
+  &:focus {
+    outline: none; // el ratón o el dedo no dibujan aro
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent); // el teclado sí
+    outline-offset: 2px;
+  }
+  .scrub-line {
+    stroke: var(--text);
+    stroke-width: 1.2;
+    stroke-dasharray: 3 3;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .scrub-dot {
+    stroke: var(--surface);
+    stroke-width: 3;
+    pointer-events: none;
+  }
+  .scrub-tip {
+    pointer-events: none;
+    rect {
+      fill: var(--surface);
+      stroke: var(--line);
+      stroke-width: 1.5;
+    }
+    .scrub-time {
+      fill: var(--muted);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .scrub-val {
+      fill: var(--text);
+      font-size: 19px;
+      font-weight: 800;
+    }
+  }
+}
+.scrub-hint {
+  margin: 0.3rem 0;
+  min-height: 1.4em;
+}
