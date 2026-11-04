@@ -1,5 +1,6 @@
 import { analyzeDay, toMin } from './predict';
 import { Arrow, DayRecord, Food, Settings } from './models';
+import { seriesPoints } from './libre-import';
 import { strToDate } from './util';
 
 /**
@@ -70,6 +71,8 @@ export interface Pair extends Context {
   sensorDay: number | null;
   /** Valor que el modelo predictivo esperaba en ese momento (si lo cubría). */
   pred?: number | null;
+  /** De dónde sale la lectura del monitor: anotada a mano o serie continua importada del CSV (en ese caso la flecha es calculada). */
+  src?: 'manual' | 'sensor';
 }
 
 /* ---------------- sensor ---------------- */
@@ -139,12 +142,55 @@ function dayPoints(d: DayRecord): { mon: Pt[]; cap: Pt[] } {
   return { mon, cap };
 }
 
+/** Umbrales de tendencia (mg/dL por minuto) con los que los sensores Libre dibujan las flechas. */
+function arrowFromRate(r: number): Arrow {
+  if (r > 2) return 'up';
+  if (r > 1) return 'upRight';
+  if (r >= -1) return 'flat';
+  if (r >= -2) return 'downRight';
+  return 'down';
+}
+
+/**
+ * Valor de la serie continua del sensor en el minuto t. Si hay lectura antes y después a no más de PAIR_MAX_GAP_MIN minutos, se interpola
+ * entre ellas; si no, vale la más cercana dentro de ese margen. null si el sensor no tenía datos en esa ventana.
+ */
+export function sensorAt(series: ReadonlyArray<{ t: number; g: number }>, t: number): { v: number; gap: number } | null {
+  if (!series.length) return null;
+  let lo = 0;
+  let hi = series.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid].t < t) lo = mid + 1;
+    else hi = mid;
+  }
+  const after = series[lo]; // primera con t >= t
+  const before = lo > 0 ? series[lo - 1] : undefined;
+  const dA = after ? after.t - t : Infinity;
+  const dB = before ? t - before.t : Infinity;
+  if (after && dA === 0) return { v: after.g, gap: 0 };
+  if (before && after && dA <= PAIR_MAX_GAP_MIN && dB <= PAIR_MAX_GAP_MIN) {
+    const f = (t - before.t) / (after.t - before.t);
+    return { v: before.g + (after.g - before.g) * f, gap: Math.min(dA, dB) };
+  }
+  const near = dA <= dB ? after : before;
+  const d = Math.min(dA, dB);
+  return near && d <= PAIR_MAX_GAP_MIN ? { v: near.g, gap: d } : null;
+}
+
+/** Flecha calculada con la pendiente de los 15 minutos anteriores (null si no hay lectura en esa ventana). */
+function sensorArrow(series: ReadonlyArray<{ t: number; g: number }>, t: number, now: number): Arrow | null {
+  const prev = sensorAt(series, t - 15);
+  return prev && prev.gap <= 5 ? arrowFromRate((now - prev.v) / 15) : null;
+}
+
 /** Empareja cada capilar con la lectura del monitor más cercana (como mucho a PAIR_MAX_GAP_MIN minutos; cada una se usa una vez). */
 export function collectPairs(days: DayRecord[], sensors: readonly string[] | undefined): Pair[] {
   const out: Pair[] = [];
   for (const d of days) {
     const { mon, cap } = dayPoints(d);
-    if (!mon.length || !cap.length) continue;
+    const series = seriesPoints(d.sensor);
+    if (!cap.length || (!mon.length && !series.length)) continue;
     const used = new Set<number>();
     // primero los emparejamientos más cercanos
     const cands: Array<{ ci: number; mi: number; gap: number }> = [];
@@ -173,8 +219,32 @@ export function collectPairs(days: DayRecord[], sensors: readonly string[] | und
         zone: zoneOf(m.v),
         arrow: arrowGroupOf(m.arrow),
         band: bandOf(sd),
+        src: 'manual',
       });
     }
+    // Los capilares que no tienen lectura anotada del monitor cerca se emparejan con la serie continua importada del CSV.
+    cap.forEach((c, ci) => {
+      if (doneCap.has(ci) || !series.length) return;
+      const at = sensorAt(series, c.t);
+      if (!at) return;
+      const v = Math.round(at.v);
+      const sd = sensorDayOf(d.date, sensors);
+      const arrow = sensorArrow(series, c.t, at.v);
+      out.push({
+        date: d.date,
+        t: c.t,
+        cap: c.v,
+        mon: v,
+        diff: v - c.v,
+        gap: at.gap,
+        arrowRaw: arrow,
+        sensorDay: sd,
+        zone: zoneOf(v),
+        arrow: arrowGroupOf(arrow),
+        band: bandOf(sd),
+        src: 'sensor',
+      });
+    });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.t - b.t);
 }

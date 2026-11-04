@@ -206,6 +206,10 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
   anotadas a mano, ni intervienen en dosis o previsiones.
 - No se importan escaneos, glucemias de tira, insulina, comidas ni notas. La primera línea del archivo (que lleva el nombre del niño) y el nombre del archivo no se leen,
   no se muestran y no se guardan.
+- **Pares automáticos con el capilar**: cada capilar anotado que no tenga una lectura del monitor anotada a mano a menos de 10 minutos se empareja con la serie importada
+  (se interpola entre la lectura anterior y la posterior, o se usa la más cercana dentro de ±10 min; si el sensor no tenía datos en esa ventana, no hay par). La **flecha** de esos
+  pares es **calculada** con la pendiente de los 15 minutos anteriores (umbrales de 1 y 2 mg/dL por minuto), no la que mostraba la aplicación. En la tabla de la pestaña Monitor se marcan con «csv».
+  Cada capilar forma como mucho un par, y se sigue exigiendo la validación con datos nuevos antes de mostrar avisos.
 - Los «eventos» del sensor del archivo se ofrecen como posibles cambios de sensor, **sin marcar**: el archivo no indica con certeza qué son.
 - **Punto que recorre la curva** (como en LibreLink): al pasar el ratón, o al tocar y arrastrar el dedo, por la gráfica del día aparece una guía vertical con un punto y un recuadro
   con la **hora y el valor** de la lectura del sensor más cercana. Con el teclado: flechas (con Mayús salta 1 h), Inicio, Fin y Escape. Donde el sensor no tiene datos

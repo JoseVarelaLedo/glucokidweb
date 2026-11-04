@@ -40,11 +40,16 @@ const sgn = (n: number | null, d = 0): string => (n === null ? '—' : (n > 0 ? 
         <div class="mon-progress" role="progressbar" [attr.aria-valuenow]="c.n" aria-valuemin="0" [attr.aria-valuemax]="reliable" aria-label="Pares monitor–capilar reunidos">
           <span [style.width.%]="progress(c)"></span>
         </div>
-        <p class="muted small">{{ c.n }} {{ c.n === 1 ? 'par reunido' : 'pares reunidos' }} (hacen falta {{ reliable }} para dar avisos fiables) · últimos {{ window }} días.</p>
         <p class="muted small">
-          Un <strong>par</strong> es un capilar con una lectura del monitor a menos de {{ gap }} minutos. Cuantos más pares, más fiable es lo
-          aprendido: es preferible tardar meses a avisar con pocos datos. Los avisos solo aparecen en las lecturas cuando el aprendizaje
-          se ha comprobado con datos que todavía no conocía.
+          {{ c.n }} {{ c.n === 1 ? 'par reunido' : 'pares reunidos' }}
+          @if (fromCsv(c) > 0) { ({{ fromCsv(c) }} {{ fromCsv(c) === 1 ? 'sale' : 'salen' }} de la serie importada del CSV) }
+          (hacen falta {{ reliable }} para dar avisos fiables) · últimos {{ window }} días.
+        </p>
+        <p class="muted small">
+          Un <strong>par</strong> es un capilar con una lectura del monitor a menos de {{ gap }} minutos: la que anotaste a mano o, si no hay, la de la
+          <strong>serie continua importada del CSV</strong> (se interpola entre las lecturas de antes y después del capilar, y la flecha se calcula con la pendiente de los
+          15 minutos anteriores). Cuantos más pares, más fiable es lo aprendido: es preferible tardar meses a avisar con pocos datos. Los avisos solo aparecen en las
+          lecturas cuando el aprendizaje se ha comprobado con datos que todavía no conocía.
         </p>
       </section>
 
@@ -83,8 +88,8 @@ const sgn = (n: number | null, d = 0): string => (n === null ? '—' : (n > 0 ? 
       @if (c.n === 0) {
         <section class="card center pad">
           <p class="muted">
-            Todavía no hay pares. Registra una <strong>«Medición post…»</strong> de tipo <strong>capilar</strong> con la hora real, y una lectura del monitor
-            (la de antes o después de comer, o una medición de monitor) en los {{ gap }} minutos de diferencia.
+            Todavía no hay pares. Registra una <strong>«Medición post…»</strong> de tipo <strong>capilar</strong> con la hora real y, o bien una lectura del monitor
+            en los {{ gap }} minutos de diferencia, o bien importa el CSV del sensor de esos días (en <em>Importar datos del sensor</em>): así cada capilar se empareja sola.
           </p>
         </section>
       } @else {
@@ -192,7 +197,7 @@ const sgn = (n: number | null, d = 0): string => (n === null ? '—' : (n > 0 ? 
                   <th scope="row">{{ p.date.slice(5) }}</th>
                   <td>{{ time(p.t) }}</td>
                   <td>{{ p.cap }}</td>
-                  <td>{{ p.mon }}</td>
+                  <td>{{ p.mon }} @if (p.src === 'sensor') { <small class="muted" title="Sale de la serie importada del CSV">csv</small> }</td>
                   <td>{{ sgn(p.diff) }}</td>
                   <td>{{ p.sensorDay ?? '—' }}</td>
                 </tr>
@@ -236,6 +241,11 @@ export class MonitorPanel {
 
   constructor() {
     void this.calib.reload(); // la pestaña siempre enseña datos al día
+  }
+
+  /** Pares cuya lectura del monitor sale de la serie importada del CSV. */
+  protected fromCsv(c: Calibration): number {
+    return c.pairs.filter((p) => p.src === 'sensor').length;
   }
 
   protected progress(c: Calibration): number {

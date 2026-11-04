@@ -30,7 +30,7 @@ const dmy = (d: string): string => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice
       <h3>Importar datos del sensor</h3>
       <p class="muted small">
         Descarga el CSV de glucosa desde la web del monitor y súbelo aquí (por ejemplo una vez por semana). Las lecturas continuas se
-        guardan en cada día y aparecen en su gráfica y en sus instantáneas. Las mediciones que anotas a mano no se tocan.
+        guardan en cada día y aparecen en su gráfica y en sus instantáneas, y sirven además para emparejar cada capilar con el sensor (pestaña Monitor). Las mediciones que anotas a mano no se tocan.
       </p>
       <div class="row gap">
         <label class="btn small primary file-btn" for="sensor-file">{{ busy() ? 'Leyendo…' : 'Elegir archivo CSV…' }}</label>
