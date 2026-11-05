@@ -1,4 +1,6 @@
 import { Component, DoCheck, computed, inject, input, signal } from '@angular/core';
+import { AnalysisService } from '../core/analysis.service';
+import { CalibrationService } from '../core/calibration.service';
 import { DataService } from '../core/data.service';
 import { FoodPatterns, foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
@@ -20,7 +22,7 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
   template: `
     <section class="card day-curve" aria-label="Curva de glucemia del día">
       <h3>Curva de glucemia</h3>
-      <app-glucose-chart [analysis]="analysis()" [sensor]="day().sensor" />
+      <app-glucose-chart [analysis]="analysis()" [sensor]="day().sensor" [bands]="bands()" />
 
       <dl class="summary tight">
         <div><dt>Insulina rápida</dt><dd>{{ fmt(totals().rapid) }} U</dd></div>
@@ -99,6 +101,8 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
 })
 export class DayCurve implements DoCheck {
   private readonly data = inject(DataService);
+  private readonly analysisSvc = inject(AnalysisService);
+  private readonly calib = inject(CalibrationService);
   readonly day = input.required<DayRecord>();
 
   protected readonly fmt = fmtNum;
@@ -108,6 +112,8 @@ export class DayCurve implements DoCheck {
 
   protected readonly a = signal<DayAnalysis>({ measured: [], doses: [], episodes: [], general: [], ready: false });
   protected readonly analysis = computed(() => this.a());
+  /** Errores pasados de la previsión (últimos 180 días) para dibujar la banda de incertidumbre. */
+  protected readonly bands = computed(() => this.analysisSvc.bands());
   protected readonly patterns = signal<{ findings: PatternFinding[]; daysUsed: number } | null>(null);
   protected readonly loadingPat = signal(false);
   protected readonly food = signal<FoodPatterns | null>(null);
@@ -120,7 +126,10 @@ export class DayCurve implements DoCheck {
     const key = canon([this.day(), s.isf, s.model, s.gramsPerRation, s.unitsPerRation, s.targetGlucose, this.data.foods().length]);
     if (key === this.snap) return;
     this.snap = key;
-    this.a.set(analyzeDay(this.day(), s, this.data.foods()));
+    const a = analyzeDay(this.day(), s, this.data.foods());
+    this.a.set(a);
+    // la banda necesita el historial: se carga una vez por sesión, solo si hay alguna curva prevista que dibujar
+    if (a.episodes.some((e) => e.points.length > 1) && !this.calib.error()) void this.analysisSvc.ensure();
   }
 
   protected gpr(): number {

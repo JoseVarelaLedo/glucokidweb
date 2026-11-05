@@ -646,7 +646,7 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
   return result;
 }
 
-function predictedAt(ep: Episode, t: number): number | null {
+export function predictedAt(ep: Episode, t: number): number | null {
   const pts = ep.points;
   if (pts.length < 2 || t < pts[0].t || t > pts[pts.length - 1].t) return null;
   for (let i = 1; i < pts.length; i++) {
@@ -764,3 +764,4 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
+

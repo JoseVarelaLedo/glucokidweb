@@ -107,6 +107,41 @@
   <p class="muted">
     Ahora: 1 ración = {{ fmt(data.settings().gramsPerRation) }} g de hidratos = {{ fmt(data.settings().unitsPerRation) }} U de rápida.
   </p>
+  @if (observed(); as o) {
+    <div class="observed" aria-label="Relación observada">
+      <h3 class="obs-title">Lo que se ha puesto en la práctica</h3>
+      <p class="muted small">Según lo anotado en los últimos {{ obsDays }} días (unidades ÷ raciones de cada comida, mediana). Es solo una referencia: no se aplica a ningún cálculo.</p>
+      @if (!o.meals.length) {
+        <p class="muted">Todavía no hay comidas con unidades y raciones anotadas en este periodo.</p>
+      } @else {
+        <table class="lines rep-table">
+          <caption class="sr-only">Unidades de rápida por ración según lo anotado</caption>
+          <thead><tr><th scope="col">Comida</th><th scope="col">U por ración</th><th scope="col">Raciones por U</th><th scope="col">Comidas</th></tr></thead>
+          <tbody>
+            @for (m of o.meals; track m.id) {
+              <tr>
+                <th scope="row">{{ m.name }}</th>
+                @if (m.enough) {
+                  <td>{{ fmt(m.unitsPerRation, 2) }}</td><td>{{ fmt(m.rationsPerUnit, 1) }}</td><td>{{ m.n }}</td>
+                } @else {
+                  <td colspan="3" class="muted">pocos datos ({{ m.n }}; hacen falta {{ obsMin }})</td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+        @if (o.global; as g) {
+          <p class="muted small">Todas las comidas juntas: ≈ {{ fmt(g.unitsPerRation, 2) }} U por ración (≈ {{ fmt(g.rationsPerUnit, 1) }} raciones por U), con {{ g.n }} comidas.</p>
+        }
+      }
+      @if (o.excludedHigh) {
+        <p class="muted small">
+          Se han dejado fuera {{ o.excludedHigh }} {{ o.excludedHigh === 1 ? 'comida' : 'comidas' }} con glucemia previa por encima de {{ obsMaxPre }} mg/dL, porque su dosis puede incluir una corrección.
+        </p>
+      }
+      <p class="muted small">La relación que se usa es la de «Unidades de rápida por ración» de arriba. Ajustadla con vuestro equipo médico; esta tabla solo ayuda a ver qué se está haciendo en cada comida.</p>
+    </div>
+  }
   <div class="field">
     <label for="tg">Glucemia objetivo para correcciones (mg/dL)</label>
     <input id="tg" type="number" inputmode="numeric" min="70" max="250" step="5" [(ngModel)]="data.settings().targetGlucose" />
@@ -152,7 +187,6 @@
     <p class="muted small">Factor de sensibilidad = 1700 ÷ insulina diaria total (rápida + lenta).</p>
   </div>
   <p class="muted">Total diario: <strong>{{ fmt(totalDaily(), 1) }} U</strong>
-    @if (ratioHint(); as r) { · como referencia, la «regla de 500» sugiere ≈ 1 U por {{ fmt(r, 1) }} g de hidratos }
   </p>
   <button type="button" class="btn" (click)="calcIsf()">Calcular factor de sensibilidad</button>
   @if (isfMsg()) {

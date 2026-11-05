@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CalcRow, CalcService } from '../../core/calc.service';
 import { DataService } from '../../core/data.service';
-import { CalcLine, CalcResult, carbsFor, computeDose } from '../../core/dose';
+import { CalcLine, CalcResult, DoseResult, RuleOf50, carbsFor, computeDose, ruleOf50 } from '../../core/dose';
 import { planTotal } from '../../core/defaults';
 import { Food } from '../../core/models';
 import { FoodPicker } from '../../shared/food-picker';
@@ -98,8 +98,8 @@ export class Calculadora implements OnInit {
     return this.calc.result() !== null && this.calc.snapshot !== this.signature();
   }
 
-  protected calculate(): void {
-    this.message.set('');
+  /** Líneas válidas de los ingredientes y cuántas filas están a medias. */
+  private buildLines(): { lines: CalcLine[]; skipped: number } {
     const lines: CalcLine[] = [];
     let skipped = 0;
     for (const r of this.calc.rows()) {
@@ -110,6 +110,28 @@ export class Calculadora implements OnInit {
       }
       lines.push({ name: f.name, grams: r.grams, carbs: carbsFor(f.carbsPer100g, r.grams) });
     }
+    return { lines, skipped };
+  }
+
+  /**
+   * Pestaña «Regla del 50»: la relación sale de la dosis diaria total de Ajustes (rápida + lenta), no de «Unidades por ración».
+   * Se calcula al momento con los ingredientes de la pestaña Comida y se compara con la dosis de la relación de Ajustes.
+   */
+  protected ruleResult(): { rule: RuleOf50 | null; carbs: number; rations: number; byRule: DoseResult | null; byAjustes: DoseResult | null; incomplete: number; differs: boolean } {
+    const s = this.data.settings();
+    const rule = ruleOf50(s.dailyRapid, s.dailyLenta, s.gramsPerRation);
+    const { lines, skipped } = this.buildLines();
+    const carbs = lines.reduce((acc, l) => acc + l.carbs, 0);
+    const byRule = rule && lines.length ? computeDose(carbs, { ...s, unitsPerRation: rule.unitsPerRation }) : null;
+    const byAjustes = lines.length ? computeDose(carbs, s) : null;
+    // «bastante distinta»: la relación de Ajustes se aparta más de un 25 % de la de la regla
+    const differs = !!rule && s.unitsPerRation > 0 && Math.abs(s.unitsPerRation - rule.unitsPerRation) / rule.unitsPerRation > 0.25;
+    return { rule, carbs, rations: byRule?.rations ?? byAjustes?.rations ?? 0, byRule, byAjustes, incomplete: skipped, differs };
+  }
+
+  protected calculate(): void {
+    this.message.set('');
+    const { lines, skipped } = this.buildLines();
     this.incomplete.set(skipped);
     if (!lines.length) {
       this.calc.result.set(null);

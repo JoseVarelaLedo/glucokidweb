@@ -47,6 +47,24 @@ export function computeDose(carbsGrams: number, s: DoseSettings, adjustments: Do
   return { carbsGrams, rations, baseUnits, adjustments, totalUnits, roundedUnits, step };
 }
 
+/** Regla del 50 (en general, regla de 500 ÷ dosis diaria total): cuántas raciones cubre 1 U. Solo una estimación general. */
+export interface RuleOf50 {
+  /** Dosis diaria total (rápida + lenta) de Ajustes. */
+  ddt: number;
+  /** Gramos de hidratos que cubre 1 U (500 ÷ DDT) y raciones por unidad (con los gramos por ración de Ajustes; con 10 g es 50 ÷ DDT). */
+  gramsPerUnit: number;
+  rationsPerUnit: number;
+  unitsPerRation: number;
+}
+
+export function ruleOf50(dailyRapid: number | null | undefined, dailyLenta: number | null | undefined, gramsPerRation: number): RuleOf50 | null {
+  const ddt = (Number(dailyRapid) || 0) + (Number(dailyLenta) || 0);
+  const gpr = gramsPerRation > 0 ? gramsPerRation : 10;
+  if (!(ddt > 0)) return null;
+  const gramsPerUnit = 500 / ddt;
+  return { ddt, gramsPerUnit, rationsPerUnit: gramsPerUnit / gpr, unitsPerRation: gpr / gramsPerUnit };
+}
+
 export function carbsFor(carbsPer100g: number, grams: number): number {
   return (carbsPer100g * grams) / 100;
 }

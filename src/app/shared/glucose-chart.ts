@@ -1,5 +1,6 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { classify } from '../core/glucose';
+import { BAND_LO, BAND_HI, BandModel, bandFor } from '../core/predictor-eval';
 import { seriesPoints, seriesStats } from '../core/libre-import';
 import { DayAnalysis, MeasuredPoint, fmtTime } from '../core/predict';
 import { fmtNum } from '../core/util';
@@ -112,6 +113,13 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
             <text [attr.x]="d.x + 3" [attr.y]="M.t + 10 + d.row * 11" class="dose-label">{{ d.text }}</text>
           }
 
+          <!-- bandas de incertidumbre (donde cayó el 80 % de los casos parecidos) -->
+          @for (c of g.curves; track c.name) {
+            @if (c.band) {
+              <path [attr.d]="c.band" class="pred-band" />
+            }
+          }
+
           <!-- curvas previstas -->
           @for (c of g.curves; track c.name) {
             <path [attr.d]="c.d" class="pred" />
@@ -170,11 +178,18 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
           }
           <span><i class="lg line"></i> Medido</span>
           <span><i class="lg dash"></i> Previsto</span>
+          @if (g.hasBand) {
+            <span><i class="lg band"></i> Banda: donde cayó el 80 % de casos parecidos</span>
+          }
           <span><i class="lg dot"></i> Monitor / comida</span>
           <span><i class="lg dia"></i> Capilar</span>
           <span><i class="lg tri"></i> Ejercicio</span>
           <span><i class="lg dose"></i> Dosis</span>
         </div>
+
+        @if (bandNote(g); as n) {
+          <p class="small band-note" [class.band-warn]="n.warn" role="status">{{ n.text }}</p>
+        }
 
         @if (stats(); as st) {
           <p class="muted small sensor-stats">
@@ -212,6 +227,8 @@ export class GlucoseChart {
   readonly analysis = input.required<DayAnalysis>();
   /** Serie continua del sensor del día (`DayRecord.sensor`). */
   readonly sensor = input<number[] | undefined>(undefined);
+  /** Errores pasados de la previsión (ver `buildBands`); con ellos se dibuja la banda alrededor de cada curva prevista. */
+  readonly bands = input<BandModel | null>(null);
   protected readonly fmt = fmtNum;
   protected readonly stats = computed(() => {
     const st = seriesStats(this.sensor());
@@ -283,6 +300,21 @@ export class GlucoseChart {
     this.scrubIdx.set(next);
   }
 
+  /** Texto bajo la gráfica sobre la banda: solo si hay alguna curva prevista y se ha podido evaluar el historial. */
+  protected bandNote(g: { curves: Array<{ band: string | null }> }): { text: string; warn: boolean } | null {
+    const m = this.bands();
+    if (!m || !g.curves.length) return null;
+    if (!m.ready) {
+      return { text: `Aún sin banda de incertidumbre: hay ${m.have} comparaciones previsto-real a las 2 h y hacen falta ${m.needed}. Se irán sumando al importar el CSV del sensor.`, warn: false };
+    }
+    if (!g.curves.some((c) => c.band)) return null;
+    const w = Math.round(m.width120 ?? 0);
+    const pct = Math.round((BAND_HI - BAND_LO) * 100);
+    return m.wide
+      ? { text: `Previsión poco fiable: a las 2 h el ${pct} % de los casos parecidos cayó en un margen de ${w} mg/dL. Tómala solo como una idea general.`, warn: true }
+      : { text: `A las 2 h el ${pct} % de los casos parecidos cayó en un margen de ${w} mg/dL alrededor de la curva (con ${m.have} comparaciones). Es solo informativo.`, warn: false };
+  }
+
   protected pick(i: number): void {
     this.selIdx.update((c) => (c === i ? null : i));
   }
@@ -303,7 +335,13 @@ export class GlucoseChart {
     if (t1 - t0 < 360) t1 = Math.min(1440, t0 + 360);
     if (t1 - t0 < 360) t0 = Math.max(0, t1 - 360);
 
-    const vals = [...sp.map((p) => p.g), ...measured.map((p) => p.g), ...preds.flatMap((e) => e.points.map((p) => p.g))];
+    const bandPts = preds.map((e) => bandFor(this.bands(), e));
+    const vals = [
+      ...sp.map((p) => p.g),
+      ...measured.map((p) => p.g),
+      ...preds.flatMap((e) => e.points.map((p) => p.g)),
+      ...bandPts.flatMap((b) => (b ?? []).map((p) => p.hi)),
+    ];
     const yMin = 40;
     const yMax = Math.max(250, Math.ceil((Math.max(0, ...vals) + 15) / 50) * 50);
 
@@ -340,10 +378,17 @@ export class GlucoseChart {
     }
     if (cur) sensorPaths.push(cur);
 
-    const curves = preds.map((e) => ({
-      name: e.mealId,
-      d: e.points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.g).toFixed(1)}`).join(' '),
-    }));
+    const curves = preds.map((e, k) => {
+      const b = bandPts[k];
+      // polígono: borde alto de izquierda a derecha y borde bajo de derecha a izquierda
+      const band = b
+        ? b.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.hi).toFixed(1)}`).join(' ') +
+          [...b].reverse().map((p) => `L${x(p.t).toFixed(1)} ${y(p.lo).toFixed(1)}`).join('') +
+          'Z'
+        : null;
+      return { name: e.mealId, band, d: e.points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)} ${y(p.g).toFixed(1)}`).join(' ') };
+    });
+    const hasBand = curves.some((c) => c.band);
 
     // dosis: si dos etiquetas quedan muy juntas, la segunda baja una fila
     const doses: Array<{ x: number; text: string; row: number }> = [];
@@ -360,6 +405,6 @@ export class GlucoseChart {
     // lo que se puede recorrer: la serie continua del sensor y, si no la hay, las mediciones anotadas
     const scrub: Array<{ t: number; g: number }> = sp.length ? sp : [...measured].sort((a, b) => a.t - b.t).map((p) => ({ t: p.t, g: p.g }));
 
-    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, doses, measured, sensorPaths, scrub, t0, t1 };
+    return { hasData, x, y, xTicks, yTicks, yMin, yMax, dots, line, curves, hasBand, doses, measured, sensorPaths, scrub, t0, t1 };
   });
 }

@@ -20,6 +20,7 @@ import { MonitorPanel } from '../../shared/monitor-panel';
 import { SensorImport } from '../../shared/sensor-import';
 import { sensorDayOf } from '../../core/calibration';
 import { Period } from '../../core/evolution';
+import { ReportPanel } from '../../shared/report';
 import { ReadingEditor } from '../../shared/reading-editor';
 
 const ACTIVITY_SUGGESTIONS = [
@@ -36,7 +37,7 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, NgTemplateOutlet, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport],
+  imports: [FormsModule, NgTemplateOutlet, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport, ReportPanel],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {
@@ -52,13 +53,14 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   protected readonly calendarOpen = signal(false);
   protected readonly curveOpen = signal(false);
   /** Vista: el día o la evolución por semanas, meses o año. */
-  protected readonly view = signal<'dia' | Period | 'monitor'>('dia');
-  protected readonly views: ReadonlyArray<{ key: 'dia' | Period | 'monitor'; label: string }> = [
+  protected readonly view = signal<'dia' | Period | 'monitor' | 'informe'>('dia');
+  protected readonly views: ReadonlyArray<{ key: 'dia' | Period | 'monitor' | 'informe'; label: string }> = [
     { key: 'dia', label: 'Día' },
     { key: 'semana', label: 'Semana' },
     { key: 'mes', label: 'Mes' },
     { key: 'anio', label: 'Año' },
     { key: 'monitor', label: 'Monitor' },
+    { key: 'informe', label: 'Informe' },
   ];
   protected period(): Period {
     const v = this.view();

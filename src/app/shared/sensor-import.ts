@@ -180,8 +180,9 @@ export class SensorImport {
         const list = [...new Set([...(this.data.settings().sensors ?? []), ...sensors])].sort();
         this.data.settings.update((s) => ({ ...s, sensors: list }));
         await this.data.saveSettings(this.data.settings());
-        void this.calib.reload();
       }
+      // el informe y las bandas usan este historial: se refresca para que incluya lo recién importado
+      if (r.added || r.changed || sensors.length) void this.calib.reload();
       this.done.set(
         r.added || r.changed
           ? `Importadas ${fmtNum(r.added + r.changed, 0)} lecturas en ${r.days} ${r.days === 1 ? 'día' : 'días'}.` +

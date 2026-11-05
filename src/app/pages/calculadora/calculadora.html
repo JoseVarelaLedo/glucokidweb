@@ -1,9 +1,13 @@
 <section class="card intro">
   <h2>Calculadora de insulina rápida</h2>
   <p class="muted">
-    1 ración = <strong>{{ fmt(data.settings().gramsPerRation) }} g</strong> de hidratos ·
-    1 ración = <strong>{{ fmt(data.settings().unitsPerRation) }} U</strong> de rápida.
+    Relación configurada en Ajustes: <strong>{{ fmt(data.settings().gramsPerRation) }} g</strong> de hidratos = 1 ración →
+    <strong>{{ fmt(data.settings().unitsPerRation) }} U</strong> de rápida por ración.
     <a routerLink="/ajustes">Cambiar</a>
+  </p>
+  <p class="muted small">
+    No es una equivalencia fija: depende de la dosis diaria total y varía a lo largo del día (suele hacer falta más insulina por ración en el desayuno),
+    con el ejercicio (menos después de hacer deporte), el estrés, la falta de sueño o una enfermedad. La marca vuestro equipo médico y puede cambiar con el tiempo.
   </p>
   <p class="muted small">Introduce el peso <strong>cocido</strong> de cada ingrediente. Proteínas, grasas y verduras verdes cuentan 0 g de hidratos.</p>
 </section>
@@ -11,9 +15,37 @@
 <div class="seg tabs" role="tablist" aria-label="Tipo de cálculo">
   <button type="button" role="tab" [class.on]="calc.tab() === 'comida'" [attr.aria-selected]="calc.tab() === 'comida'" (click)="calc.tab.set('comida')">Comida</button>
   <button type="button" role="tab" [class.on]="calc.tab() === 'correccion'" [attr.aria-selected]="calc.tab() === 'correccion'" (click)="calc.tab.set('correccion')">Corrección por hiperglucemia</button>
+  <button type="button" role="tab" [class.on]="calc.tab() === 'regla'" [attr.aria-selected]="calc.tab() === 'regla'" (click)="calc.tab.set('regla')">Regla del 50</button>
 </div>
 
-@if (calc.tab() === 'comida') {
+@if (calc.tab() !== 'correccion') {
+@if (calc.tab() === 'regla') {
+  @let rr = ruleResult();
+  <section class="card rule50" aria-label="Regla del 50">
+    <h3>Regla del 50</h3>
+    <p class="muted small">
+      Estimación general: raciones por unidad = 50 ÷ dosis diaria total (con raciones de 10 g; si cambias los gramos por ración en Ajustes, se adapta).
+      La dosis diaria se toma de <a routerLink="/ajustes">Ajustes</a> (rápida + lenta). Los ingredientes son los mismos de la pestaña Comida.
+    </p>
+    @if (rr.rule; as r) {
+      <dl class="summary tight">
+        <div><dt>Dosis diaria total</dt><dd>{{ fmt(r.ddt, 1) }} U</dd></div>
+        <div><dt>Raciones por unidad</dt><dd>≈ {{ fmt(r.rationsPerUnit, 2) }}</dd></div>
+        <div><dt>Unidades por ración</dt><dd>≈ {{ fmt(r.unitsPerRation, 2) }} U</dd></div>
+        <div><dt>Relación de Ajustes</dt><dd>{{ fmt(data.settings().unitsPerRation, 2) }} U por ración</dd></div>
+      </dl>
+      @if (rr.differs) {
+        <p class="notice" role="status">
+          La regla da ≈ {{ fmt(r.unitsPerRation, 2) }} U por ración y Ajustes usa {{ fmt(data.settings().unitsPerRation, 2) }}: son bastante distintas. Con dosis diarias pequeñas la
+          regla se aleja con facilidad de la pauta real. Fíate de la pauta de vuestro equipo médico.
+        </p>
+      }
+    } @else {
+      <p class="notice">Falta la dosis diaria total. Rellena la insulina diaria de rápida y de lenta en <a routerLink="/ajustes">Ajustes</a>.</p>
+    }
+  </section>
+}
+
 <div class="calc-rows">
   @for (r of calc.rows(); track r.id) {
     <div class="card calc-row">
@@ -46,15 +78,41 @@
 
 <div class="actions">
   <button type="button" class="btn ghost" (click)="calc.add()">+ Añadir ingrediente</button>
-  <button type="button" class="btn primary big" (click)="calculate()">Calcular</button>
+  @if (calc.tab() === 'comida') {
+    <button type="button" class="btn primary big" (click)="calculate()">Calcular</button>
+  }
   <button type="button" class="btn ghost small" (click)="calc.clear()">Vaciar</button>
 </div>
 
-@if (incomplete() > 0) {
+@if (calc.tab() === 'comida' && incomplete() > 0) {
   <p class="notice">Hay {{ incomplete() }} ingrediente(s) sin alimento o sin peso: no se han incluido en el cálculo.</p>
 }
 
-@if (calc.result(); as res) {
+@if (calc.tab() === 'regla') {
+  @let rr = ruleResult();
+  @if (rr.incomplete > 0) {
+    <p class="notice">Hay {{ rr.incomplete }} ingrediente(s) sin alimento o sin peso: no se han incluido en el cálculo.</p>
+  }
+  @if (rr.byRule; as d) {
+    <section class="card result" aria-live="polite">
+      <p class="muted">Insulina rápida según la regla del 50</p>
+      <div class="big-number">{{ fmt(d.roundedUnits) }} <span>U</span></div>
+      <p class="muted small">Redondeada a {{ fmt(d.step) }} U · valor exacto {{ fmt(d.totalUnits) }} U</p>
+      <dl class="summary">
+        <div><dt>Hidratos totales</dt><dd>{{ fmt(d.carbsGrams, 1) }} g</dd></div>
+        <div><dt>Raciones</dt><dd>{{ fmt(d.rations) }}</dd></div>
+        <div><dt>Con la relación de Ajustes</dt><dd>{{ fmt(rr.byAjustes?.roundedUnits) }} U</dd></div>
+      </dl>
+      <p class="disclaimer">
+        Estimación por una regla general, para comparar. No se puede pasar al registro desde aquí. La dosis final la decide la familia siguiendo la pauta de su equipo médico.
+      </p>
+    </section>
+  } @else if (rr.rule) {
+    <p class="muted">Añade ingredientes con su peso cocido para ver la dosis por la regla del 50.</p>
+  }
+}
+
+@if (calc.tab() === 'comida' && calc.result(); as res) {
   <section class="card result" [class.stale]="stale()">
     @if (stale()) {
       <p class="notice">Has cambiado datos desde el último cálculo. Pulsa <strong>Calcular</strong> para actualizar.</p>
@@ -68,7 +126,7 @@
     <dl class="summary">
       <div><dt>Hidratos totales</dt><dd>{{ fmt(res.dose.carbsGrams, 1) }} g</dd></div>
       <div><dt>Raciones</dt><dd>{{ fmt(res.dose.rations) }}</dd></div>
-      <div><dt>Relación</dt><dd>1 ración = {{ fmt(data.settings().unitsPerRation) }} U</dd></div>
+      <div><dt>Relación de Ajustes</dt><dd>{{ fmt(data.settings().unitsPerRation) }} U por ración</dd></div>
     </dl>
 
     <table class="lines">

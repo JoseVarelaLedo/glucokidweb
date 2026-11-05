@@ -1,4 +1,4 @@
-import { Component, DoCheck, OnDestroy, inject, signal } from '@angular/core';
+import { Component, DoCheck, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AlertsService } from '../../core/alerts.service';
 import { AuthService } from '../../core/auth.service';
@@ -8,7 +8,10 @@ import { DataService } from '../../core/data.service';
 import { InjectionDef, RationPlan, Settings } from '../../core/models';
 import { fmtNum, round, uid } from '../../core/util';
 import { makeDefaultModel, planTotal } from '../../core/defaults';
-import { ISF_RULE, carbRatioHint, sensitivityFactor } from '../../core/predict';
+import { ISF_RULE, sensitivityFactor } from '../../core/predict';
+import { CalibrationService } from '../../core/calibration.service';
+import { OBS_DAYS, OBS_MAX_PRE, OBS_MIN, observedRatios } from '../../core/ratio-observed';
+import { addDays, todayStr } from '../../core/util';
 
 @Component({
   selector: 'app-ajustes',
@@ -21,6 +24,15 @@ export class Ajustes implements DoCheck, OnDestroy {
   protected readonly alerts = inject(AlertsService);
   protected readonly push = inject(PushService);
   protected readonly fmt = fmtNum;
+  private readonly calib = inject(CalibrationService);
+  protected readonly obsDays = OBS_DAYS;
+  protected readonly obsMin = OBS_MIN;
+  protected readonly obsMaxPre = OBS_MAX_PRE;
+  /** Relación unidades/ración que se ha puesto de verdad según lo anotado (solo informativa). */
+  protected readonly observed = computed(() => {
+    const to = todayStr();
+    return observedRatios(this.calib.history(), addDays(to, -(OBS_DAYS - 1)), to, this.data.foods(), this.data.settings().injections);
+  });
   protected readonly isfMsg = signal('');
   protected readonly backupBusy = signal(false);
   protected readonly backupMsg = signal('');
@@ -32,6 +44,7 @@ export class Ajustes implements DoCheck, OnDestroy {
 
   constructor() {
     this.auto.reset(this.data.settings());
+    void this.calib.ensure();
   }
 
   ngDoCheck(): void {
@@ -126,10 +139,6 @@ export class Ajustes implements DoCheck, OnDestroy {
   protected totalDaily(): number {
     const s = this.data.settings();
     return (s.dailyRapid || 0) + (s.dailyLenta || 0);
-  }
-
-  protected ratioHint(): number | null {
-    return carbRatioHint(this.totalDaily());
   }
 
   protected calcIsf(): void {

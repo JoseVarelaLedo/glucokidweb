@@ -16,7 +16,11 @@ export class CalibrationService {
   readonly loading = signal(false);
   readonly error = signal('');
 
-  private days: DayRecord[] = [];
+  /** Registros de los últimos WINDOW_DAYS días tal y como se cargaron (los usan también los informes y la evaluación de la previsión). */
+  readonly history = signal<DayRecord[]>([]);
+  private get days(): DayRecord[] {
+    return this.history();
+  }
   private key = '';
   private inFlight?: Promise<void>;
 
@@ -36,7 +40,7 @@ export class CalibrationService {
     this.error.set('');
     try {
       const today = todayStr();
-      this.days = await this.data.getRange(addDays(today, -(WINDOW_DAYS - 1)), today);
+      this.history.set(await this.data.getRange(addDays(today, -(WINDOW_DAYS - 1)), today));
       this.key = this.data.viewUid();
       this.recompute();
     } catch (e) {

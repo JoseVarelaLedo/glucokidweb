@@ -76,6 +76,8 @@ si tienes dudas, hazlo **privado**.
 - `core/evolution.ts` estadísticas y tendencia por semana, mes y año.
 - `core/calibration.ts` y `core/calibration.service.ts` fiabilidad del monitor frente a las glucemias capilares.
 - `core/food-patterns.ts` alimentos que se repiten con subidas o bajadas de glucemia.
+- `core/predictor-eval.ts` (precisión de la previsión y bandas de incertidumbre), `core/agp.ts` (informe: tiempo en rango, GMI, CV, AGP), `core/overnight.ts` (noches y ayunas) y
+  `core/analysis.service.ts`; pantallas `shared/report.ts` y `shared/glucose-profile.ts`.
 - `core/libre-csv.ts` (lectura del CSV del monitor) y `core/libre-import.ts` (serie por día, unión sin duplicados, estadísticas); `shared/sensor-import.ts` es la pantalla de importación.
 - `core/foods-io.ts` importación y exportación del catálogo de alimentos en JSON.
 - `core/stores.ts` almacenamiento local y Firestore (`days/{fecha}`, `config/settings`, `config/foods`).
@@ -137,7 +139,6 @@ si tienes dudas, hazlo **privado**.
 - En móviles y tabletas (puntero táctil) se usa el **selector nativo** del sistema, agrupado, con la opción «Otro alimento (escribir)…» en el registro.
 
 ### Evolución por semana, mes y año
-
 - En *Registro* hay pestañas **Día · Semana · Mes · Año · Monitor**. Semana (lunes a domingo), mes y año naturales, con navegación entre periodos.
 - Resumen de **tendencia** frente al periodo anterior (mejora, empeora o estable según el % de mediciones en rango, con avisos sobre hipoglucemias,
   variabilidad y cambio de la media), indicadores (mediciones, media, % en rango, hipoglucemias, variabilidad, insulina rápida y lenta diaria),
@@ -250,6 +251,54 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - Aparece en el botón **«Buscar patrones en los últimos 14 días»** (junto a la curva del día) y en la tarjeta **«Alimentos y glucemia»** de Semana, Mes y Año.
   Con pocos días suele no haber suficientes repeticiones: en el mes y el año se ve más.
 - Son **pistas, no causas**: influyen la dosis, la cantidad, la hora, el ejercicio y con qué se combina el alimento. Es informativo y no sustituye al equipo médico.
+
+### Previsión medida y bandas de incertidumbre
+
+- Cálculo en `core/predictor-eval.ts`. Para cada comida con curva prevista se compara lo previsto con lo que midió el sensor continuo a los **30, 60… 300 min** (si ese día no hay serie, con las
+  mediciones anotadas a ±10 min). La previsión de cada día se recalcula **con los ajustes actuales** y con lo que se anotó de hidratos y dosis (incluidas correcciones posteriores).
+- Se muestra en **Registro → Informe → Previsión**: error medio, diferencia media (real − previsto), % de casos a menos de 30 mg/dL y cuánto mejora a suponer que «la glucemia sigue igual»,
+  a 1, 2 y 3 h, por comida y por franja horaria. Con menos de 6 comparaciones en una celda se avisa de que hay pocos datos.
+- **Banda de incertidumbre**: con los errores pasados (últimos 180 días) se calcula, para cada instante tras la comida, dónde cayó el **80 %** de los casos (cuantiles 10–90 % de real − previsto).
+  Se dibuja como franja alrededor de la curva prevista en la gráfica del día. Hacen falta **20 comparaciones a las 2 h**; mientras no las haya se avisa y no se dibuja nada.
+  Si a las 2 h la franja mide más de **120 mg/dL** (`BAND_WIDE`) se avisa de que la previsión es poco informativa. Una comprobación hacia delante (la banda de cada día se calcula solo con días anteriores)
+  indica qué fracción de lo real cayó dentro; lo ideal es cerca del 80 %.
+- Es solo **observación**: no cambia la previsión, la calculadora ni las dosis. La banda es la misma anchura para todas las comidas (depende del instante, no de la comida).
+
+### Informe para la consulta
+
+- **Registro → Informe**, con periodos de 7, 14, 30 y 90 días que terminan en el **último día con lecturas del sensor**. Usa solo la serie continua del CSV; las mediciones manuales no se mezclan.
+- Muestra: lecturas y cobertura de datos, glucosa media, **GMI** (3,31 + 0,02392 × media en mg/dL), desviación típica, **CV**, tiempo en cada tramo (&lt;54, 54–69, 70–180, 181–250, &gt;250) frente a los
+  objetivos del consenso internacional (70–180 &gt; 70 %, &lt;70 &lt; 4 %, &lt;54 &lt; 1 %, &gt;180 &lt; 25 %, &gt;250 &lt; 5 %, CV ≤ 36 %), hipoglucemias (episodios de ≥ 15 min por debajo de 70, por franja del día),
+  el **perfil ambulatorio (AGP)** en tramos de 30 min (mediana, 25–75 % y 5–95 %) y, con más de 7 días, una tabla por semanas.
+- Se avisa si hay menos del 70 % de datos del periodo o menos de 14 días. Los objetivos son generales: los de cada niño los marca su equipo médico.
+- **Imprimir / guardar PDF** usa la impresión del navegador y saca los tres apartados con el nombre del niño y la fecha, sin menús.
+- El informe usa los últimos 180 días ya cargados (una vez por sesión, como la calibración): tras importar un CSV se refresca solo; si se corrige otra cosa, pulsa «Actualizar datos».
+
+### Noche y ayunas
+
+- Cálculo en `core/overnight.ts`. Una **noche valorada** es la ventana de 00:00 a 06:00 (o hasta la primera comida, dosis rápida o ración extra del día) **sin comida ni insulina rápida activa**:
+  se descuenta lo que pudiera quedar de la cena (hidratos con grasa: 4 h) y de la última rápida de la tarde anterior (duración de acción de *Ajustes*). Hacen falta **3 h limpias**, el **70 %** de lecturas y
+  registro de la tarde anterior y del propio día; si no, la noche aparece en «Noches no valoradas» con el motivo.
+- Por noche: valor al inicio y al final (medianas de 3 lecturas), mínimo, máximo y si hubo hipoglucemia. **Ayunas**: valor justo antes de la primera comida o dosis de la mañana, con ≥ 3 h sin comer.
+- Solo se habla de **patrón** con al menos **5 noches**: subida o bajada de ≥ 30 mg/dL en el 60 % o más de las noches, o hipoglucemias nocturnas en ≥ 2 noches (o ≥ 15 %). Una bajada de 54 mg/dL se avisa siempre.
+- Son **observaciones para comentar con el equipo médico**: la aplicación no sugiere cambiar ninguna dosis (ni de lenta ni de rápida).
+
+### Relación unidades/ración observada (Ajustes)
+
+- Cálculo en `core/ratio-observed.ts`. Con lo anotado en los **últimos 30 días** se divide, en cada comida de rápida con unidades y raciones, unidades ÷ raciones y se toma la **mediana por comida**
+  (y el total: unidades ÷ raciones de todas las comidas). Se cuentan solo raciones con hidratos (el brócoli y similares no suman) y se necesitan **5 comidas** por fila.
+- Se dejan fuera las comidas con **glucemia previa por encima de 180 mg/dL**, porque la dosis puede incluir una corrección y la relación saldría inflada; la pantalla dice cuántas se descartaron.
+- Es **solo informativo**: no cambia «Unidades de rápida por ración» ni la calculadora ni la previsión. Esa relación la fija el equipo médico y se escribe a mano en Ajustes.
+- Ya **no se muestra** la «regla de 500»: con dosis diarias pequeñas se aleja mucho de la pauta real.
+- Importante: la relación de Ajustes también la usa el modelo predictivo para convertir hidratos en subida de glucosa. Si no se parece a lo que realmente se pone, la curva prevista saldrá exagerada o escasa.
+
+### Calculadora: pestaña «Regla del 50»
+
+- Tercera pestaña de la calculadora (junto a *Comida* y *Corrección por hiperglucemia*). Calcula **raciones por unidad = 50 ÷ dosis diaria total** con la insulina diaria de rápida y de lenta de *Ajustes*
+  (con raciones de 10 g; si cambian los gramos por ración, usa 500 ÷ dosis ÷ gramos). Función `ruleOf50` en `core/dose.ts`.
+- Usa los mismos ingredientes de la pestaña *Comida* y da la dosis al momento, **al lado de la que sale con la relación de Ajustes**. Si ambas difieren más de un 25 %, avisa.
+- Ajustes no cambia: «Unidades de rápida por ración» sigue siendo la relación que usan la pestaña *Comida* y el modelo predictivo.
+- Es una **estimación general para comparar**: con dosis diarias pequeñas se aleja mucho de la pauta real. Por eso esta pestaña **no pasa el resultado al registro**. La dosis la decide la familia con su equipo médico.
 
 ## Aviso
 
