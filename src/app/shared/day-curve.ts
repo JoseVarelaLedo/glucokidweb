@@ -4,7 +4,7 @@ import { CalibrationService } from '../core/calibration.service';
 import { DataService } from '../core/data.service';
 import { FoodPatterns, foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
-import { DayAnalysis, Level, PatternFinding, analyzeDay, analyzePatterns, fmtTime, mealCarbs } from '../core/predict';
+import { DayAnalysis, Level, PatternFinding, analyzeDay, analyzePatterns, fmtTime, mealCarbs, modelFit } from '../core/predict';
 import { addDays, canon, fmtNum } from '../core/util';
 import { GlucoseChart } from './glucose-chart';
 
@@ -119,11 +119,24 @@ export class DayCurve implements DoCheck {
   protected readonly food = signal<FoodPatterns | null>(null);
 
   private snap = '';
+  private setSnap = '';
+  private ensured = '';
 
   ngDoCheck(): void {
     // El día se edita "in situ": recalculamos cuando cambia su contenido o la configuración.
     const s = this.data.settings();
-    const key = canon([this.day(), s.isf, s.model, s.gramsPerRation, s.unitsPerRation, s.targetGlucose, this.data.foods().length]);
+    // el ajuste aprendido de las curvas del sensor (se carga con el historial) también cambia la previsión
+    const uid = this.data.viewUid();
+    if (this.ensured !== uid) {
+      this.ensured = uid;
+      void this.calib.ensure(); // carga el historial una vez por niño: de él sale el ajuste de la previsión
+    }
+    const setKey = canon([s.isf, s.model, s.gramsPerRation, s.unitsPerRation]);
+    if (setKey !== this.setSnap) {
+      this.setSnap = setKey;
+      this.calib.refit(); // si cambian el factor o la ratio, el ajuste anterior ya no vale
+    }
+    const key = canon([this.day(), s.isf, s.model, s.gramsPerRation, s.unitsPerRation, s.targetGlucose, this.data.foods().length, modelFit()]);
     if (key === this.snap) return;
     this.snap = key;
     const a = analyzeDay(this.day(), s, this.data.foods());

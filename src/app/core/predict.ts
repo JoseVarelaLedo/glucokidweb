@@ -19,6 +19,7 @@
  *
  * No es un dispositivo médico ni sustituye a la pauta del equipo de endocrinología.
  */
+import { signal } from '@angular/core';
 import { FOOD_GROUPS, makeDefaultModel, planTotal } from './defaults';
 import { classify } from './glucose';
 import { Arrow, DayRecord, Food, Meal, PredictModel, Reading, Settings } from './models';
@@ -187,13 +188,52 @@ export function carbAbsorbed(t: number, durationMin: number): number {
 }
 
 /** mg/dL/min típicos de cada flecha del monitor. */
-const ARROW_RATE: Record<Arrow, number> = { up: 2.5, upRight: 1.5, flat: 0, downRight: -1.5, down: -2.5 };
-const MOMENTUM_TAU_MIN = 10;
+export const ARROW_RATE: Record<Arrow, number> = { up: 2.5, upRight: 1.5, flat: 0, downRight: -1.5, down: -2.5 };
+export const MOMENTUM_TAU_MIN = 10;
 /**
  * Una previsión por encima de esto (el techo de lectura de los sensores) no es creíble en un niño con insulina pautada: casi seguro hay un dato
  * mal (dosis sin anotar, raciones de más, hora equivocada o factor de sensibilidad inadecuado). En ese caso no se dibuja ni se usa.
  */
 export const PRED_MAX_PLAUSIBLE = 400;
+/**
+ * Por debajo de esto una previsión tampoco es creíble (sería una hipoglucemia grave): casi seguro el factor de sensibilidad o la relación
+ * raciones/unidades no encajan con el niño. No se enseña la cifra; se avisa de que el modelo no cuadra.
+ */
+export const PRED_MIN_PLAUSIBLE = 40;
+
+/**
+ * Ajuste del modelo aprendido de las curvas reales del sensor (ver `model-fit.ts`): `a` multiplica el efecto de los hidratos y `b` el de la insulina.
+ * Solo se aplica si se calculó con los mismos Ajustes que hay ahora (`key`), porque si cambian el factor o la ratio ya no vale.
+ */
+export interface ModelFit {
+  active: boolean;
+  a: number;
+  b: number;
+  episodes: number;
+  points: number;
+  key: string;
+  rmseBefore: number | null;
+  rmseAfter: number | null;
+}
+export const NO_FIT: ModelFit = { active: false, a: 1, b: 1, episodes: 0, points: 0, key: '', rmseBefore: null, rmseAfter: null };
+export const modelFit = signal<ModelFit>(NO_FIT);
+
+/** Clave de los Ajustes de los que depende el ajuste aprendido. */
+export function fitKey(s: Settings): string {
+  return JSON.stringify([s.isf, s.gramsPerRation, s.unitsPerRation, sanitizeModel(s.model)]);
+}
+
+/** Serie del sensor (`[minuto, mg/dL, …]`) → puntos ordenados. */
+export function sensorPoints(series: number[] | undefined | null): CurvePoint[] {
+  const out: CurvePoint[] = [];
+  if (!series) return out;
+  for (let i = 0; i + 1 < series.length; i += 2) {
+    const t = Number(series[i]);
+    const g = Number(series[i + 1]);
+    if (Number.isFinite(t) && Number.isFinite(g) && g > 0) out.push({ t, g });
+  }
+  return out.sort((x, y) => x.t - y.t);
+}
 
 /* ------------------------------------------------------------------ */
 /* Eventos del día                                                      */
@@ -306,6 +346,11 @@ export interface Episode {
   recs: Recommendation[];
   /** Pico que habría salido si la previsión no se hubiera descartado por imposible (solo si se descartó). */
   rawPeak?: number;
+  /** Idem por abajo: la mínima que habría salido si se descartó por irreal (hipoglucemia imposible). */
+  rawNadir?: number;
+  /** Si hay una lectura posterior al ancla (sensor o medición anotada), la previsión futura se rehízo desde ella. */
+  nowT?: number;
+  nowG?: number;
 }
 
 export interface MeasuredPoint {
@@ -329,13 +374,20 @@ export interface DayAnalysis {
 export const DEVIATION_TOLERANCE = 25; // mg/dL: por debajo se considera "acorde"
 export const DEVIATION_ALERT = 40; // mg/dL: a partir de aquí se explica la desviación
 
-/** Efecto acumulado (mg/dL) de comidas e insulina en el minuto t. */
-function effect(ev: DayEvents, t: number, isf: number, gPerUnit: number, model: PredictModel, until: number): number {
+/** Efecto acumulado de comidas (c, sube) e insulina (i, baja), en mg/dL positivos, en el minuto t. */
+export function effectParts(ev: DayEvents, t: number, isf: number, gPerUnit: number, model: PredictModel, until: number): { c: number; i: number } {
   const csf = isf / gPerUnit; // mg/dL por gramo
-  let e = 0;
-  for (const c of ev.carbs) if (c.t < until) e += csf * c.grams * carbAbsorbed(t - c.t, c.durationMin);
-  for (const i of ev.insulin) if (i.t < until) e -= isf * i.units * (1 - iobFraction(t - i.t, model));
-  return e;
+  let c = 0;
+  let i = 0;
+  for (const x of ev.carbs) if (x.t < until) c += csf * x.grams * carbAbsorbed(t - x.t, x.durationMin);
+  for (const x of ev.insulin) if (x.t < until) i += isf * x.units * (1 - iobFraction(t - x.t, model));
+  return { c, i };
+}
+
+/** Efecto neto (mg/dL) en el minuto t, con el ajuste aprendido (a = hidratos, b = insulina). */
+function effect(ev: DayEvents, t: number, isf: number, gPerUnit: number, model: PredictModel, until: number, a = 1, b = 1): number {
+  const p = effectParts(ev, t, isf, gPerUnit, model, until);
+  return a * p.c - b * p.i;
 }
 
 function measuredPoints(day: DayRecord): MeasuredPoint[] {
@@ -371,8 +423,12 @@ function exerciseNear(day: DayRecord, t0: number, tEnd: number): string | null {
   return null;
 }
 
-export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnalysis {
+export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: ModelFit | null = modelFit()): DayAnalysis {
   const model = sanitizeModel(s.model);
+  const useFit = !!fit && fit.active && fit.key === fitKey(s);
+  const fa = useFit ? (fit as ModelFit).a : 1;
+  const fb = useFit ? (fit as ModelFit).b : 1;
+  const sensorPts = sensorPoints(day.sensor);
   const isf = s.isf && s.isf > 0 ? s.isf : 0;
   const gPerRation = s.gramsPerRation > 0 ? s.gramsPerRation : 10;
   const uPerRation = s.unitsPerRation > 0 ? s.unitsPerRation : 1;
@@ -466,21 +522,58 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
     }
 
     // --- Curva ---
-    const e0 = effect(events, t0, isf, gPerUnit, model, horizon);
+    // 1) Previsión «pura» desde el ancla (es la que se compara con lo medido para evaluar el modelo).
+    const e0 = effect(events, t0, isf, gPerUnit, model, horizon, fa, fb);
     const rate = m.before.arrow ? ARROW_RATE[m.before.arrow] : 0;
     const step = 5;
+    const forecast: CurvePoint[] = [];
     for (let t = t0; t <= horizon + 0.01; t += step) {
       const mom = rate * MOMENTUM_TAU_MIN * (1 - Math.exp(-(t - t0) / MOMENTUM_TAU_MIN));
-      const g = g0 + (effect(events, t, isf, gPerUnit, model, horizon) - e0) + mom;
-      ep.points.push({ t, g: Math.max(20, Math.round(g * 10) / 10) });
+      const g = g0 + (effect(events, t, isf, gPerUnit, model, horizon, fa, fb) - e0) + mom;
+      forecast.push({ t, g: Math.max(0, Math.round(g * 10) / 10) });
     }
-    ep.nadir = ep.points.reduce((a, b) => (b.g < a.g ? b : a));
-    ep.peak = ep.points.reduce((a, b) => (b.g > a.g ? b : a));
-    ep.endG = ep.points[ep.points.length - 1]?.g ?? null;
 
-    if (ep.peak.g > PRED_MAX_PLAUSIBLE) {
+    // 2) Si ya hay lecturas posteriores al ancla (serie del sensor o mediciones anotadas) el futuro se rehace desde la última:
+    //    lo medido manda sobre lo que el modelo suponía.
+    const known: Array<{ t: number; g: number; arrow: Arrow | null; fromSensor: boolean }> = [
+      ...sensorPts.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, arrow: null as Arrow | null, fromSensor: true })),
+      ...measured.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, arrow: x.arrow, fromSensor: false })),
+    ];
+    const last = known.length ? known.reduce((a, b) => (b.t > a.t ? b : a)) : null;
+    let pts: CurvePoint[] = forecast;
+    if (last && last.t < horizon - 10) {
+      // tendencia real de los últimos minutos (sensor) o, si no hay, la flecha de esa lectura
+      let r2 = 0;
+      const prev = sensorPts.filter((x) => x.t <= last.t - 8 && x.t >= last.t - 25).pop();
+      if (prev) r2 = Math.max(-3, Math.min(3, (last.g - prev.g) / (last.t - prev.t)));
+      else if (last.arrow) r2 = ARROW_RATE[last.arrow];
+      const eNow = effect(events, last.t, isf, gPerUnit, model, horizon, fa, fb);
+      pts = forecast.filter((x) => x.t < last.t);
+      pts.push({ t: last.t, g: last.g });
+      let tt = t0 + Math.floor((last.t - t0) / step + 1) * step;
+      for (; tt <= horizon + 0.01; tt += step) {
+        const mom = r2 * MOMENTUM_TAU_MIN * (1 - Math.exp(-(tt - last.t) / MOMENTUM_TAU_MIN));
+        const g = last.g + (effect(events, tt, isf, gPerUnit, model, horizon, fa, fb) - eNow) + mom;
+        pts.push({ t: tt, g: Math.max(0, Math.round(g * 10) / 10) });
+      }
+      ep.nowT = last.t;
+      ep.nowG = last.g;
+    }
+    const implausible = (g: number) => g > PRED_MAX_PLAUSIBLE || g < PRED_MIN_PLAUSIBLE;
+    const fromT = ep.nowT ?? t0;
+    // la parte anterior a la última lectura ya no es una previsión: si era absurda, simplemente no se dibuja
+    if (ep.nowT !== undefined && pts.some((x) => x.t < fromT && implausible(x.g))) pts = pts.filter((x) => x.t >= fromT);
+    ep.points = pts;
+    const future = pts.filter((x) => x.t >= fromT);
+    ep.nadir = future.reduce((a, b) => (b.g < a.g ? b : a));
+    ep.peak = future.reduce((a, b) => (b.g > a.g ? b : a));
+    ep.endG = pts[pts.length - 1]?.g ?? null;
+
+    if (ep.peak.g > PRED_MAX_PLAUSIBLE || ep.nadir.g < PRED_MIN_PLAUSIBLE) {
       // Imposible con insulina pautada: se descarta la curva y se explica qué revisar, en vez de enseñar un valor alarmante e irreal.
+      const high = ep.peak.g > PRED_MAX_PLAUSIBLE;
       ep.rawPeak = Math.round(ep.peak.g);
+      ep.rawNadir = Math.round(ep.nadir.g);
       ep.points = [];
       ep.nadir = null;
       ep.peak = null;
@@ -489,19 +582,23 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
       recs.push({
         level: 'atencion',
         code: 'prevision-imposible',
-        text:
-          `${m.name}: con los datos anotados la previsión pasaría de ${PRED_MAX_PLAUSIBLE} mg/dL (≈ ${ep.rawPeak}), algo que no es creíble con la insulina puesta con regularidad, así que no se dibuja. ` +
-          `Casi seguro hay un dato por revisar: raciones de más (¿alguna de un alimento sin hidratos?), una dosis sin anotar o con la hora equivocada, o un factor de sensibilidad o una relación raciones/unidades en Ajustes que no corresponde. ` +
-          `Esto no es un aviso médico: si dudas de la glucemia real, mide.`,
+        text: high
+          ? `${m.name}: con los datos anotados la previsión pasaría de ${PRED_MAX_PLAUSIBLE} mg/dL (≈ ${ep.rawPeak}), algo que no es creíble con la insulina puesta con regularidad, así que no se dibuja. ` +
+            `Casi seguro hay un dato por revisar: raciones de más (¿alguna de un alimento sin hidratos?), una dosis sin anotar o con la hora equivocada, o un factor de sensibilidad o una relación raciones/unidades en Ajustes que no corresponde. ` +
+            `Esto no es un aviso médico: si dudas de la glucemia real, mide.`
+          : `${m.name}: con los datos anotados el modelo bajaría de ${PRED_MIN_PLAUSIBLE} mg/dL (≈ ${ep.rawNadir}), algo que no coincide con lo que se ha medido, así que no se dibuja ni se avisa con esa cifra. ` +
+            `Lo más probable es que el factor de sensibilidad (sale de la insulina diaria total) o la relación raciones/unidades de Ajustes no encajen con cómo responde el niño, o que falte anotar algún hidrato. ` +
+            `Esto no es un aviso médico: manda la glucemia real, y si la tendencia del monitor es descendente, mide.`,
       });
       result.episodes.push(ep);
       continue;
     }
 
-    // --- Desviaciones frente a lo medido en este episodio ---
+    // --- Desviaciones frente a lo medido en este episodio (siempre contra la previsión «pura», no la rehecha) ---
+    const pure = { points: forecast } as Episode;
     for (const p of measured) {
       if (p.t <= t0 || p.t > horizon) continue;
-      const pred = predictedAt(ep, p.t);
+      const pred = predictedAt(pure, p.t);
       if (pred === null) continue;
       ep.deviations.push({ t: p.t, measured: p.g, predicted: pred, dev: p.g - pred, label: p.label });
     }
@@ -516,18 +613,27 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[]): DayAnaly
 
     /* ---------------- Subalgoritmo de recomendaciones ---------------- */
 
-    // R1 · riesgo de hipoglucemia prevista
-    if (ep.nadir && ep.nadir.g < 70) {
+    // R1 · riesgo de hipoglucemia prevista (solo del futuro: lo ya medido no es una previsión)
+    const since = ep.nowT !== undefined ? ` (previsión rehecha desde la lectura de las ${fmtTime(ep.nowT)}: ${Math.round(ep.nowG as number)} mg/dL)` : '';
+    if (ep.nowG !== undefined && ep.nowG < 70) {
+      recs.push({ level: 'alerta', code: 'hipo-actual', text: `La última lectura (${fmtTime(ep.nowT as number)}) fue ${Math.round(ep.nowG)} mg/dL: sigue el protocolo de hipoglucemia de vuestro equipo médico.` });
+    }
+    const futureNadir = ep.nadir && ep.nadir.t > fromT + 4 ? ep.nadir : null;
+    if (futureNadir && futureNadir.g < 70 && !(ep.nowG !== undefined && ep.nowG < 70)) {
+      // sin lecturas posteriores ni ajuste con las curvas reales, la cifra sale solo de las reglas generales de Ajustes: se avisa, pero con menos alarma
+      const grounded = useFit || ep.nowT !== undefined;
       recs.push({
-        level: 'alerta',
+        level: grounded ? 'alerta' : 'atencion',
         code: 'hipo-prevista',
-        text: `Se prevé bajar a ≈${Math.round(ep.nadir.g)} mg/dL hacia las ${fmtTime(ep.nadir.t)}. Valora medir antes de esa hora y tener a mano hidratos de acción rápida, según vuestro protocolo.`,
+        text:
+          `Se prevé bajar a ≈${Math.round(futureNadir.g)} mg/dL hacia las ${fmtTime(futureNadir.t)}${since}. Valora medir antes de esa hora y tener a mano hidratos de acción rápida, según vuestro protocolo.` +
+          (grounded ? '' : ' Ojo: esta cifra sale solo de los factores de Ajustes, sin contrastar con las curvas reales del sensor de este niño; puede estar exagerada.'),
       });
-    } else if (ep.nadir && ep.nadir.g < 90 && ep.nadir.t > t0 + 20) {
+    } else if (futureNadir && futureNadir.g < 90 && futureNadir.t > fromT + 20) {
       recs.push({
         level: 'atencion',
         code: 'bajada-prevista',
-        text: `La previsión baja hasta ≈${Math.round(ep.nadir.g)} mg/dL hacia las ${fmtTime(ep.nadir.t)}: conviene vigilar la tendencia en ese tramo.`,
+        text: `La previsión baja hasta ≈${Math.round(futureNadir.g)} mg/dL hacia las ${fmtTime(futureNadir.t)}${since}: conviene vigilar la tendencia en ese tramo.`,
       });
     }
 
@@ -764,4 +870,3 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
-

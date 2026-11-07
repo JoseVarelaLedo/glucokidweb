@@ -139,6 +139,7 @@ si tienes dudas, hazlo **privado**.
 - En móviles y tabletas (puntero táctil) se usa el **selector nativo** del sistema, agrupado, con la opción «Otro alimento (escribir)…» en el registro.
 
 ### Evolución por semana, mes y año
+
 - En *Registro* hay pestañas **Día · Semana · Mes · Año · Monitor**. Semana (lunes a domingo), mes y año naturales, con navegación entre periodos.
 - Resumen de **tendencia** frente al periodo anterior (mejora, empeora o estable según el % de mediciones en rango, con avisos sobre hipoglucemias,
   variabilidad y cambio de la media), indicadores (mediciones, media, % en rango, hipoglucemias, variabilidad, insulina rápida y lenta diaria),
@@ -233,11 +234,20 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 
 ### La previsión: qué aprende y límites de seguridad
 
-- El **modelo predictivo no aprende**: es un cálculo fijo con los datos de *Ajustes* (factor de sensibilidad, raciones por unidad, tiempos de acción de la insulina y de absorción).
-  Lo que **sí aprende** es la corrección monitor–capilar (pestaña *Monitor*), y aun así no modifica la previsión: solo se contrasta. Los patrones por alimentos tampoco cambian el cálculo.
+- La **forma** del modelo es fija (curvas de insulina y de absorción de hidratos con los datos de *Ajustes*), pero la previsión se **contrasta y se corrige con las curvas reales del sensor** de tres maneras:
+  1. **Se rehace desde la última lectura.** Si tras la comida ya hay lecturas (serie del CSV del sensor o mediciones anotadas), la parte futura de la curva parte de la última, con la tendencia real de los últimos minutos,
+     en vez de seguir la previsión inicial. Lo medido manda sobre lo supuesto. La previsión original se conserva para evaluar el modelo.
+  2. **Ajuste con el historial** (`core/model-fit.ts`). Con al menos **5 comidas con curva del sensor** (hora, dosis y raciones anotadas, sin ejercicio cerca ni hidratos sin dosis) se estiman dos factores:
+     uno para el efecto de los hidratos y otro para el de la insulina (mínimos cuadrados, atraídos hacia 1 y limitados a 0,25–1,6, con pesos que reducen el efecto de valores atípicos).
+     Solo se activa si reduce el error al menos un 3 %, y solo vale con los mismos Ajustes con los que se calculó. **No cambia Ajustes ni la calculadora**: solo la curva prevista. Se ve en *Ajustes*, «Ajuste de la previsión con las curvas del sensor».
+     Esto corrige el caso típico de una dosis diaria pequeña, en la que 1700 ÷ dosis diaria da un factor de sensibilidad demasiado grande y la previsión se desploma.
+  3. **Límites de seguridad** (ver abajo).
+  Aprende también la corrección monitor–capilar (pestaña *Monitor*), que solo se contrasta. Los patrones por alimentos tampoco cambian el cálculo.
   Las desviaciones entre lo medido y lo previsto se muestran para que se revisen los ajustes con el equipo médico, no se aplican solas.
 - **Límite de plausibilidad**: si con los datos anotados la previsión pasaría de **400 mg/dL** (`PRED_MAX_PLAUSIBLE` en `core/predict.ts`), no se dibuja. En su lugar se avisa de qué revisar
   (raciones de más, dosis sin anotar o con otra hora, factor de sensibilidad o relación raciones/unidades en Ajustes).
+- **Límite por abajo**: si el modelo bajara de **40 mg/dL** (`PRED_MIN_PLAUSIBLE`), tampoco se dibuja ni se avisa con esa cifra: se explica que el factor de sensibilidad o la ratio de Ajustes no encajan.
+  Si la previsión de hipoglucemia sale solo de Ajustes (sin lecturas posteriores ni ajuste con el sensor), el aviso pasa de «alerta» a «atención» y se aclara que la cifra puede estar exagerada.
 - **Hidratos sin dosis**: si una comida tiene hidratos pero **no hay unidades anotadas** (campo vacío), no se calcula previsión y se pide anotarlas (0 U si de verdad no se puso insulina).
 - Es informativo, no es un producto sanitario y no sustituye a la medición ni al equipo médico.
 

@@ -142,6 +142,23 @@
       <p class="muted small">La relación que se usa es la de «Unidades de rápida por ración» de arriba. Ajustadla con vuestro equipo médico; esta tabla solo ayuda a ver qué se está haciendo en cada comida.</p>
     </div>
   }
+  @if (fit(); as f) {
+    <div class="observed" aria-label="Ajuste de la previsión">
+      <h3 class="obs-title">Ajuste de la previsión con las curvas del sensor</h3>
+      @if (f.active) {
+        <p class="muted small">
+          Comparando lo previsto con lo que midió el sensor en {{ f.episodes }} comidas, la previsión usa el efecto de la insulina ×{{ fmt(f.b, 2) }} y el de los hidratos ×{{ fmt(f.a, 2) }}
+          respecto a lo que salen de estos Ajustes (error medio de {{ f.rmseBefore }} → {{ f.rmseAfter }} mg/dL). No cambia ningún valor de Ajustes ni ningún cálculo de dosis: solo la curva prevista.
+        </p>
+      } @else if (f.episodes < 5 || f.points < 25) {
+        <p class="muted small">
+          Aún no se ha podido ajustar: hay {{ f.episodes }} comidas con curva del sensor y hacen falta 5 (importa el CSV del sensor y anota hora, dosis y raciones de las comidas). Mientras tanto la previsión usa solo los valores de Ajustes y se corrige con las lecturas del día.
+        </p>
+      } @else {
+        <p class="muted small">Con {{ f.episodes }} comidas con curva del sensor, los valores de Ajustes ya explican bien lo medido: la previsión no necesita corrección.</p>
+      }
+    </div>
+  }
   <div class="field">
     <label for="tg">Glucemia objetivo para correcciones (mg/dL)</label>
     <input id="tg" type="number" inputmode="numeric" min="70" max="250" step="5" [(ngModel)]="data.settings().targetGlucose" />

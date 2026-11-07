@@ -2,6 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Calibration, WINDOW_DAYS, attachPredictions, buildCalibration, collectPairs } from './calibration';
 import { DataService } from './data.service';
 import { DayRecord } from './models';
+import { fitModel } from './model-fit';
+import { ModelFit, NO_FIT, modelFit } from './predict';
 import { addDays, todayStr } from './util';
 
 /**
@@ -21,6 +23,11 @@ export class CalibrationService {
   private get days(): DayRecord[] {
     return this.history();
   }
+  /**
+   * Ajuste del modelo predictivo con las curvas reales del sensor (ver `model-fit.ts`). Se recalcula solo al cambiar el historial o los Ajustes
+   * y se publica en `modelFit`, que es lo que usa `analyzeDay`.
+   */
+  readonly fit = signal<ModelFit>(NO_FIT);
   private key = '';
   private inFlight?: Promise<void>;
 
@@ -50,8 +57,21 @@ export class CalibrationService {
     }
   }
 
+  /** Recalcula el ajuste con el historial ya cargado (también al cambiar el factor de sensibilidad o la ratio, que lo invalidan). */
+  refit(): void {
+    if (!this.history().length) {
+      this.fit.set(NO_FIT);
+      modelFit.set(NO_FIT);
+      return;
+    }
+    const f = fitModel(this.history(), this.data.settings(), this.data.foods());
+    this.fit.set(f);
+    modelFit.set(f);
+  }
+
   /** Vuelve a calcular con los días ya cargados (p. ej. tras anotar un cambio de sensor). */
   recompute(): void {
+    this.refit(); // primero el ajuste: las predicciones de los pares ya lo usan
     const pairs = collectPairs(this.days, this.data.settings().sensors);
     attachPredictions(pairs, this.days, this.data.settings(), this.data.foods());
     this.cal.set(buildCalibration(pairs));

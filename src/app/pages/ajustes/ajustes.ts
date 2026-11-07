@@ -8,7 +8,7 @@ import { DataService } from '../../core/data.service';
 import { InjectionDef, RationPlan, Settings } from '../../core/models';
 import { fmtNum, round, uid } from '../../core/util';
 import { makeDefaultModel, planTotal } from '../../core/defaults';
-import { ISF_RULE, sensitivityFactor } from '../../core/predict';
+import { ISF_RULE, fitKey, sensitivityFactor } from '../../core/predict';
 import { CalibrationService } from '../../core/calibration.service';
 import { OBS_DAYS, OBS_MAX_PRE, OBS_MIN, observedRatios } from '../../core/ratio-observed';
 import { addDays, todayStr } from '../../core/util';
@@ -32,6 +32,11 @@ export class Ajustes implements DoCheck, OnDestroy {
   protected readonly observed = computed(() => {
     const to = todayStr();
     return observedRatios(this.calib.history(), addDays(to, -(OBS_DAYS - 1)), to, this.data.foods(), this.data.settings().injections);
+  });
+  /** Ajuste del modelo de previsión con las curvas del sensor (solo informativo). */
+  protected readonly fit = computed(() => {
+    const f = this.calib.fit();
+    return f.key === fitKey(this.data.settings()) ? f : null;
   });
   protected readonly isfMsg = signal('');
   protected readonly backupBusy = signal(false);
