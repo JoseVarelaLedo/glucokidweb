@@ -67,7 +67,7 @@
         </section>
       }
       <ng-template #extraCard let-x let-title="title">
-                <div class="card extra">
+                <div class="card extra" (focusout)="sortExtras(d, $event)">
                   <div class="row between">
                     <strong>{{ title }}</strong>
                     <button type="button" class="icon-btn danger" (click)="removeExtra(d, x)" aria-label="Eliminar medición">×</button>

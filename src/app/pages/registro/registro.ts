@@ -378,16 +378,25 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   }
 
   protected extrasFor(d: DayRecord, m: Meal): ExtraReading[] {
-    return d.extras
-      .filter((x) => x.afterInjectionId === m.injectionId)
-      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    // sin ordenar aquí: si la lista se reordenara mientras se teclea la hora, la tarjeta cambiaría de sitio y se perdería el foco (ver sortExtras)
+    return d.extras.filter((x) => x.afterInjectionId === m.injectionId);
   }
 
   /** Mediciones de madrugada o previas al desayuno (no cuelgan de ninguna comida). */
   protected preExtras(d: DayRecord): ExtraReading[] {
-    return d.extras
-      .filter((x) => x.afterInjectionId === PRE_ID)
-      .sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    return d.extras.filter((x) => x.afterInjectionId === PRE_ID);
+  }
+
+  /**
+   * Ordena las mediciones por hora, pero solo cuando se sale de la tarjeta (no al teclear): reordenar mientras se escribe
+   * movía la tarjeta en el DOM, el campo perdía el foco y la hora tecleada se quedaba a medias.
+   */
+  protected sortExtras(d: DayRecord, ev: FocusEvent): void {
+    const card = ev.currentTarget as HTMLElement | null;
+    const to = ev.relatedTarget as Node | null;
+    if (card && to && card.contains(to)) return; // sigue dentro de la misma tarjeta
+    const sorted = [...d.extras].sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    if (sorted.some((x, i) => x !== d.extras[i])) d.extras = sorted;
   }
 
   protected addPre(d: DayRecord): void {
