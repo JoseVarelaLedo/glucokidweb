@@ -188,7 +188,6 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - La copia de seguridad completa (días, ajustes, alimentos y docs) sigue en *Ajustes → Copia de seguridad*.
 
 ### Fiabilidad del monitor frente al capilar
-
 - Pestaña **Monitor** del registro. Cada capilar con una lectura del monitor a menos de 10 minutos forma un **par**; de los pares se aprende, con
   estadística robusta y prudente, cuánto y en qué condiciones difiere el monitor del capilar (nivel de glucemia, flecha de tendencia y **día de vida del sensor**).
 - **Cambio de sensor**: se anota la fecha en la pestaña Monitor (se guarda en `settings.sensors`); el registro muestra «sensor día N».
@@ -234,14 +233,18 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 
 ### La previsión: qué aprende y límites de seguridad
 
-- La **forma** del modelo es fija (curvas de insulina y de absorción de hidratos con los datos de *Ajustes*), pero la previsión se **contrasta y se corrige con las curvas reales del sensor** de tres maneras:
-  1. **Se rehace desde la última lectura.** Si tras la comida ya hay lecturas (serie del CSV del sensor o mediciones anotadas), la parte futura de la curva parte de la última, con la tendencia real de los últimos minutos,
-     en vez de seguir la previsión inicial. Lo medido manda sobre lo supuesto. La previsión original se conserva para evaluar el modelo.
-  2. **Ajuste con el historial** (`core/model-fit.ts`). Con al menos **5 comidas con curva del sensor** (hora, dosis y raciones anotadas, sin ejercicio cerca ni hidratos sin dosis) se estiman dos factores:
+- La **forma** del modelo es fija (curvas de insulina y de absorción de hidratos con los datos de *Ajustes*), pero la previsión se **contrasta y se corrige con las curvas reales del sensor** de cuatro maneras:
+  1. **Filtro de Kalman** (`core/kalman.ts`). Con las lecturas posteriores al ancla (serie del CSV del sensor y mediciones anotadas) se estima, minuto a minuto, cuánto se aparta la realidad de la previsión
+     y a qué velocidad cambia esa diferencia. Cada lectura corrige el estado según su ruido (sensor ≈ ±10 mg/dL, medición anotada ≈ ±6; una lectura muy atípica pesa menos) y la parte futura de la curva se corrige con ello:
+     la diferencia se desvanece despacio (≈ 4 h) y la tendencia en minutos (≈ 20 min). Sin lecturas, la curva vuelve al modelo. La previsión original se conserva para evaluar el modelo.
+  2. **Ajuste con el historial y por franjas del día** (`core/model-fit.ts`). Con al menos **5 comidas con curva del sensor** (hora, dosis y raciones anotadas, sin ejercicio cerca ni hidratos sin dosis) se estiman dos factores:
      uno para el efecto de los hidratos y otro para el de la insulina (mínimos cuadrados, atraídos hacia 1 y limitados a 0,25–1,6, con pesos que reducen el efecto de valores atípicos).
-     Solo se activa si reduce el error al menos un 3 %, y solo vale con los mismos Ajustes con los que se calculó. **No cambia Ajustes ni la calculadora**: solo la curva prevista. Se ve en *Ajustes*, «Ajuste de la previsión con las curvas del sensor».
+     Después se ajusta **cada franja** (mañana hasta las 11 h, mediodía 11–17 h, tarde y noche desde las 17 h) por separado, atraída hacia el ajuste general, porque la sensibilidad cambia a lo largo del día
+     (mínimo 4 comidas por franja). Tanto el ajuste general como el de cada franja **solo se activan si mejoran el error en validación cruzada** (se ajusta sin una comida y se mide en ella), al menos un 3 %.
+     Solo vale con los mismos Ajustes con los que se calculó. **No cambia Ajustes ni la calculadora**: solo la curva prevista. Se ve en *Ajustes*, «Ajuste de la previsión con las curvas del sensor».
      Esto corrige el caso típico de una dosis diaria pequeña, en la que 1700 ÷ dosis diaria da un factor de sensibilidad demasiado grande y la previsión se desploma.
   3. **Límites de seguridad** (ver abajo).
+  4. **Corrección con inteligencia artificial (opcional, desactivada)**, ver la sección siguiente.
   Aprende también la corrección monitor–capilar (pestaña *Monitor*), que solo se contrasta. Los patrones por alimentos tampoco cambian el cálculo.
   Las desviaciones entre lo medido y lo previsto se muestran para que se revisen los ajustes con el equipo médico, no se aplican solas.
 - **Límite de plausibilidad**: si con los datos anotados la previsión pasaría de **400 mg/dL** (`PRED_MAX_PLAUSIBLE` en `core/predict.ts`), no se dibuja. En su lugar se avisa de qué revisar
@@ -250,6 +253,19 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
   Si la previsión de hipoglucemia sale solo de Ajustes (sin lecturas posteriores ni ajuste con el sensor), el aviso pasa de «alerta» a «atención» y se aclara que la cifra puede estar exagerada.
 - **Hidratos sin dosis**: si una comida tiene hidratos pero **no hay unidades anotadas** (campo vacío), no se calcula previsión y se pide anotarlas (0 U si de verdad no se puso insulina).
 - Es informativo, no es un producto sanitario y no sustituye a la medición ni al equipo médico.
+
+### Corrección con inteligencia artificial (TensorFlow.js, opcional)
+
+- Código: `core/residual-ai.ts` (datos, comprobación y red) y `core/residual-ai.service.ts` (interruptor, entrenamiento y aviso). **Está desactivada por defecto.**
+- **Instalación**: `npm install @tensorflow/tfjs`. Se descarga solo al activar el interruptor (carga diferida), así que no pesa en el arranque de la aplicación.
+- **Qué aprende**: el error que aún comete el modelo (con su ajuste por franjas) respecto al sensor del niño, a partir de la hora, la glucemia y flecha iniciales, hidratos, dosis, insulina activa, grasas y la propia previsión.
+  Red de 3 capas (12-6-1) entrenada en el dispositivo (CPU); los datos no salen de él. Su efecto se limita a **±40 mg/dL** y es 0 en el ancla.
+- **Cuándo se ofrece** (`readiness`): al menos 45 comidas con curva del sensor, 14 días distintos, 450 comparaciones previsto-real, 2 franjas del día con 12 comidas o más, y que el modelo base aún tenga un error medio de 12 mg/dL o más
+  (si ya acierta, no hay nada que aprender). Cuando se cumple y está desactivada, aparece un aviso sobre la curva del día y en *Ajustes*; se puede descartar con «Entendido».
+- **Cuándo se aplica**: se entrena con las comidas más antiguas y se **valida con el 25 % más reciente**, que no ha visto. Solo se usa si ahí mejora al modelo base un 5 % como mínimo; si no, queda como «no se aplica» y se vuelve a probar al haber más datos.
+- **Dónde actúa**: solo en la curva que se enseña en el registro. La evaluación de la previsión, las bandas, el informe y la calculadora **no** la usan (así se siguen midiendo con el modelo base).
+- El interruptor se guarda **en este dispositivo y para cada niño** (`localStorage`), no en Firestore.
+- Es informativo: no sustituye a la medición ni al equipo médico.
 
 ### Alimentos y glucemia (patrones)
 

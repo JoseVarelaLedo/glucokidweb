@@ -1,10 +1,11 @@
 import { Component, DoCheck, computed, inject, input, signal } from '@angular/core';
 import { AnalysisService } from '../core/analysis.service';
 import { CalibrationService } from '../core/calibration.service';
+import { ResidualAiService } from '../core/residual-ai.service';
 import { DataService } from '../core/data.service';
 import { FoodPatterns, foodPatterns } from '../core/food-patterns';
 import { DayRecord } from '../core/models';
-import { DayAnalysis, Level, PatternFinding, analyzeDay, analyzePatterns, fmtTime, mealCarbs, modelFit } from '../core/predict';
+import { DayAnalysis, Level, PatternFinding, analyzeDay, analyzePatterns, fmtTime, mealCarbs, modelFit, residualHook } from '../core/predict';
 import { addDays, canon, fmtNum } from '../core/util';
 import { GlucoseChart } from './glucose-chart';
 
@@ -22,6 +23,13 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
   template: `
     <section class="card day-curve" aria-label="Curva de glucemia del día">
       <h3>Curva de glucemia</h3>
+      @if (ai.notice()) {
+        <p class="rec info">
+          <span class="rec-ic" aria-hidden="true">i</span>
+          Hay datos suficientes para probar la corrección con inteligencia artificial (TensorFlow.js), que es opcional y está desactivada. Puedes activarla en Ajustes.
+          <button type="button" class="btn ghost small" (click)="ai.dismiss()">Entendido</button>
+        </p>
+      }
       <app-glucose-chart [analysis]="analysis()" [sensor]="day().sensor" [bands]="bands()" />
 
       <dl class="summary tight">
@@ -42,6 +50,9 @@ const CONF: Record<'alta' | 'media' | 'baja', string> = { alta: 'Fiabilidad alta
         <p class="muted small">Algunos alimentos no se han podido contar (nombre fuera del catálogo o cantidad sin g/ml).</p>
       }
 
+      @if (ai.active()) {
+        <p class="muted small">La curva prevista incluye la corrección aprendida con TensorFlow.js (como máximo ±40 mg/dL). Puedes desactivarla en Ajustes.</p>
+      }
       @for (g of a().general; track $index) {
         <p class="rec info"><span class="rec-ic" aria-hidden="true">i</span> {{ g.text }}</p>
       }
@@ -103,6 +114,7 @@ export class DayCurve implements DoCheck {
   private readonly data = inject(DataService);
   private readonly analysisSvc = inject(AnalysisService);
   private readonly calib = inject(CalibrationService);
+  protected readonly ai = inject(ResidualAiService);
   readonly day = input.required<DayRecord>();
 
   protected readonly fmt = fmtNum;
@@ -136,10 +148,10 @@ export class DayCurve implements DoCheck {
       this.setSnap = setKey;
       this.calib.refit(); // si cambian el factor o la ratio, el ajuste anterior ya no vale
     }
-    const key = canon([this.day(), s.isf, s.model, s.gramsPerRation, s.unitsPerRation, s.targetGlucose, this.data.foods().length, modelFit()]);
+    const key = canon([this.day(), s.isf, s.model, s.gramsPerRation, s.unitsPerRation, s.targetGlucose, this.data.foods().length, modelFit(), this.ai.version()]);
     if (key === this.snap) return;
     this.snap = key;
-    const a = analyzeDay(this.day(), s, this.data.foods());
+    const a = analyzeDay(this.day(), s, this.data.foods(), modelFit(), residualHook());
     this.a.set(a);
     // la banda necesita el historial: se carga una vez por sesión, solo si hay alguna curva prevista que dibujar
     if (a.episodes.some((e) => e.points.length > 1) && !this.calib.error()) void this.analysisSvc.ensure();

@@ -22,6 +22,7 @@
 import { signal } from '@angular/core';
 import { FOOD_GROUPS, makeDefaultModel, planTotal } from './defaults';
 import { classify } from './glucose';
+import { KALMAN, kInit, kPredict, kSd, kUpdate } from './kalman';
 import { Arrow, DayRecord, Food, Meal, PredictModel, Reading, Settings } from './models';
 
 /* ------------------------------------------------------------------ */
@@ -205,7 +206,27 @@ export const PRED_MIN_PLAUSIBLE = 40;
  * Ajuste del modelo aprendido de las curvas reales del sensor (ver `model-fit.ts`): `a` multiplica el efecto de los hidratos y `b` el de la insulina.
  * Solo se aplica si se calculó con los mismos Ajustes que hay ahora (`key`), porque si cambian el factor o la ratio ya no vale.
  */
+export type Slot = 'manana' | 'mediodia' | 'noche';
+/** Franjas del día en las que la sensibilidad puede ser distinta (por la hora de inicio de la comida). */
+export const SLOTS: Array<{ id: Slot; label: string; from: number; to: number }> = [
+  { id: 'manana', label: 'Mañana (hasta las 11 h)', from: 0, to: 660 },
+  { id: 'mediodia', label: 'Mediodía (11–17 h)', from: 660, to: 1020 },
+  { id: 'noche', label: 'Tarde y noche (desde las 17 h)', from: 1020, to: 1441 },
+];
+export const slotOf = (t: number): Slot => (SLOTS.find((x) => t >= x.from && t < x.to) ?? SLOTS[2]).id;
+
+export interface SlotFit {
+  active: boolean;
+  a: number;
+  b: number;
+  episodes: number;
+  points: number;
+  rmseBefore: number | null; // error de la previsión con el ajuste general
+  rmseAfter: number | null; // error con el ajuste de la franja (validación cruzada)
+}
+
 export interface ModelFit {
+  /** Ajuste general (todas las comidas). */
   active: boolean;
   a: number;
   b: number;
@@ -214,8 +235,25 @@ export interface ModelFit {
   key: string;
   rmseBefore: number | null;
   rmseAfter: number | null;
+  /** Ajuste propio de cada franja del día, si hay datos para ello (si no, se usa el general). */
+  slots?: Partial<Record<Slot, SlotFit>>;
 }
-export const NO_FIT: ModelFit = { active: false, a: 1, b: 1, episodes: 0, points: 0, key: '', rmseBefore: null, rmseAfter: null };
+export const NO_FIT: ModelFit = { active: false, a: 1, b: 1, episodes: 0, points: 0, key: '', rmseBefore: null, rmseAfter: null, slots: {} };
+
+/** Contexto de un episodio: lo que necesita una corrección aprendida (ver `residual-ai.ts`). */
+export interface ResidualCtx {
+  g0: number;
+  rate: number; // mg/dL/min de la flecha inicial
+  hour: number; // hora decimal de inicio
+  carbG: number;
+  units: number;
+  iob: number;
+  fat: boolean;
+}
+/** Corrección (mg/dL) para cada instante `hs` (min desde el inicio) dada la previsión base `deltas` (mg/dL sobre la glucemia inicial). */
+export type ResidualHook = (ctx: ResidualCtx, hs: number[], deltas: number[]) => number[];
+/** Corrección aprendida activa (la usa solo la curva que se enseña, no la evaluación del modelo). */
+export const residualHook = signal<ResidualHook | null>(null);
 export const modelFit = signal<ModelFit>(NO_FIT);
 
 /** Clave de los Ajustes de los que depende el ajuste aprendido. */
@@ -348,6 +386,9 @@ export interface Episode {
   rawPeak?: number;
   /** Idem por abajo: la mínima que habría salido si se descartó por irreal (hipoglucemia imposible). */
   rawNadir?: number;
+  ctx?: ResidualCtx;
+  /** Glucemia estimada (previsión + error filtrado) en `nowT`. */
+  nowEst?: number;
   /** Si hay una lectura posterior al ancla (sensor o medición anotada), la previsión futura se rehízo desde ella. */
   nowT?: number;
   nowG?: number;
@@ -423,11 +464,9 @@ function exerciseNear(day: DayRecord, t0: number, tEnd: number): string | null {
   return null;
 }
 
-export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: ModelFit | null = modelFit()): DayAnalysis {
+export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: ModelFit | null = modelFit(), residual: ResidualHook | null = null): DayAnalysis {
   const model = sanitizeModel(s.model);
-  const useFit = !!fit && fit.active && fit.key === fitKey(s);
-  const fa = useFit ? (fit as ModelFit).a : 1;
-  const fb = useFit ? (fit as ModelFit).b : 1;
+  const fitOk = !!fit && fit.key === fitKey(s);
   const sensorPts = sensorPoints(day.sensor);
   const isf = s.isf && s.isf > 0 ? s.isf : 0;
   const gPerRation = s.gramsPerRation > 0 ? s.gramsPerRation : 10;
@@ -522,7 +561,13 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
     }
 
     // --- Curva ---
-    // 1) Previsión «pura» desde el ancla (es la que se compara con lo medido para evaluar el modelo).
+    // ajuste aprendido: el de la franja del día si lo hay, y si no el general
+    const slotFit = fitOk ? fit?.slots?.[slotOf(t0)] : undefined;
+    const sel = slotFit?.active ? slotFit : fitOk && fit?.active ? fit : null;
+    const fa = sel ? sel.a : 1;
+    const fb = sel ? sel.b : 1;
+    const useFit = !!sel;
+    // 1) Previsión «pura» desde el ancla (es la que se compara con lo medido para evaluar el modelo)
     const e0 = effect(events, t0, isf, gPerUnit, model, horizon, fa, fb);
     const rate = m.before.arrow ? ARROW_RATE[m.before.arrow] : 0;
     const step = 5;
@@ -532,32 +577,49 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
       const g = g0 + (effect(events, t, isf, gPerUnit, model, horizon, fa, fb) - e0) + mom;
       forecast.push({ t, g: Math.max(0, Math.round(g * 10) / 10) });
     }
+    ep.ctx = {
+      g0,
+      rate,
+      hour: t0 / 60,
+      carbG,
+      units: myIns.reduce((acc, i) => acc + i.units, 0),
+      iob: ep.iobStart,
+      fat: myCarbs.some((c) => c.durationMin > model.carbMin),
+    };
+    // corrección aprendida (opcional, solo si el usuario la ha activado y ha superado su validación)
+    if (residual) {
+      const hs = forecast.map((x) => x.t - t0);
+      const corr = residual(ep.ctx, hs, forecast.map((x) => x.g - g0));
+      for (let i = 0; i < forecast.length; i++) forecast[i].g = Math.max(0, Math.round((forecast[i].g + (corr[i] || 0)) * 10) / 10);
+    }
+    const at = (t: number): number => predictedAt({ points: forecast } as Episode, t) ?? forecast[forecast.length - 1].g;
 
-    // 2) Si ya hay lecturas posteriores al ancla (serie del sensor o mediciones anotadas) el futuro se rehace desde la última:
-    //    lo medido manda sobre lo que el modelo suponía.
-    const known: Array<{ t: number; g: number; arrow: Arrow | null; fromSensor: boolean }> = [
-      ...sensorPts.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, arrow: null as Arrow | null, fromSensor: true })),
-      ...measured.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, arrow: x.arrow, fromSensor: false })),
-    ];
-    const last = known.length ? known.reduce((a, b) => (b.t > a.t ? b : a)) : null;
+    // 2) Filtro de Kalman: con las lecturas posteriores al ancla (serie del sensor y mediciones anotadas) se estima cuánto se aparta la
+    //    realidad de la previsión y cómo evoluciona esa diferencia; la parte futura de la curva se corrige con ello (ver kalman.ts).
+    const known: Array<{ t: number; g: number; r: number }> = [
+      ...sensorPts.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, r: KALMAN.rSensor })),
+      ...measured.filter((x) => x.t > t0 && x.t <= horizon).map((x) => ({ t: x.t, g: x.g, r: KALMAN.rManual })),
+    ].sort((x, y) => x.t - y.t);
+    const last = known.length ? known[known.length - 1] : null;
     let pts: CurvePoint[] = forecast;
     if (last && last.t < horizon - 10) {
-      // tendencia real de los últimos minutos (sensor) o, si no hay, la flecha de esa lectura
-      let r2 = 0;
-      const prev = sensorPts.filter((x) => x.t <= last.t - 8 && x.t >= last.t - 25).pop();
-      if (prev) r2 = Math.max(-3, Math.min(3, (last.g - prev.g) / (last.t - prev.t)));
-      else if (last.arrow) r2 = ARROW_RATE[last.arrow];
-      const eNow = effect(events, last.t, isf, gPerUnit, model, horizon, fa, fb);
+      let st = kInit(t0);
+      for (const o of known) {
+        st = kPredict(st, o.t);
+        st = kUpdate(st, o.g - at(o.t), o.r);
+      }
+      const est = at(last.t) + st.e;
       pts = forecast.filter((x) => x.t < last.t);
-      pts.push({ t: last.t, g: last.g });
+      pts.push({ t: last.t, g: Math.max(0, Math.round(est * 10) / 10) });
       let tt = t0 + Math.floor((last.t - t0) / step + 1) * step;
       for (; tt <= horizon + 0.01; tt += step) {
-        const mom = r2 * MOMENTUM_TAU_MIN * (1 - Math.exp(-(tt - last.t) / MOMENTUM_TAU_MIN));
-        const g = last.g + (effect(events, tt, isf, gPerUnit, model, horizon, fa, fb) - eNow) + mom;
-        pts.push({ t: tt, g: Math.max(0, Math.round(g * 10) / 10) });
+        const sp = kPredict(st, tt);
+        pts.push({ t: tt, g: Math.max(0, Math.round((at(tt) + sp.e) * 10) / 10) });
       }
       ep.nowT = last.t;
       ep.nowG = last.g;
+      ep.nowEst = Math.round(est);
+      void kSd;
     }
     const implausible = (g: number) => g > PRED_MAX_PLAUSIBLE || g < PRED_MIN_PLAUSIBLE;
     const fromT = ep.nowT ?? t0;
@@ -614,7 +676,7 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
     /* ---------------- Subalgoritmo de recomendaciones ---------------- */
 
     // R1 · riesgo de hipoglucemia prevista (solo del futuro: lo ya medido no es una previsión)
-    const since = ep.nowT !== undefined ? ` (previsión rehecha desde la lectura de las ${fmtTime(ep.nowT)}: ${Math.round(ep.nowG as number)} mg/dL)` : '';
+    const since = ep.nowT !== undefined ? ` (previsión corregida con las lecturas hasta las ${fmtTime(ep.nowT)}; última lectura ${Math.round(ep.nowG as number)} mg/dL)` : '';
     if (ep.nowG !== undefined && ep.nowG < 70) {
       recs.push({ level: 'alerta', code: 'hipo-actual', text: `La última lectura (${fmtTime(ep.nowT as number)}) fue ${Math.round(ep.nowG)} mg/dL: sigue el protocolo de hipoglucemia de vuestro equipo médico.` });
     }
@@ -870,3 +932,4 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
+

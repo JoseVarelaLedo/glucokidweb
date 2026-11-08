@@ -150,6 +150,27 @@
           Comparando lo previsto con lo que midió el sensor en {{ f.episodes }} comidas, la previsión usa el efecto de la insulina ×{{ fmt(f.b, 2) }} y el de los hidratos ×{{ fmt(f.a, 2) }}
           respecto a lo que salen de estos Ajustes (error medio de {{ f.rmseBefore }} → {{ f.rmseAfter }} mg/dL). No cambia ningún valor de Ajustes ni ningún cálculo de dosis: solo la curva prevista.
         </p>
+        @if (f.slots) {
+          <table class="lines rep-table">
+            <caption class="sr-only">Ajuste por franja del día</caption>
+            <thead><tr><th scope="col">Franja</th><th scope="col">Insulina</th><th scope="col">Hidratos</th><th scope="col">Comidas</th><th scope="col">Error</th></tr></thead>
+            <tbody>
+              @for (sl of slots; track sl.id) {
+                @if (f.slots[sl.id]; as x) {
+                  <tr>
+                    <th scope="row">{{ sl.label }}</th>
+                    @if (x.active) {
+                      <td>×{{ fmt(x.b, 2) }}</td><td>×{{ fmt(x.a, 2) }}</td><td>{{ x.episodes }}</td><td>{{ x.rmseBefore }} → {{ x.rmseAfter }}</td>
+                    } @else {
+                      <td colspan="3" class="muted">{{ x.episodes < 4 ? 'pocos datos (' + x.episodes + ' comidas; hacen falta 4)' : 'se usa el ajuste general (' + x.episodes + ' comidas)' }}</td><td class="muted">—</td>
+                    }
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+          <p class="muted small">Cada franja se ajusta por separado (la sensibilidad cambia a lo largo del día) solo si, al probarla con comidas que no usó para ajustarse, mejora al ajuste general.</p>
+        }
       } @else if (f.episodes < 5 || f.points < 25) {
         <p class="muted small">
           Aún no se ha podido ajustar: hay {{ f.episodes }} comidas con curva del sensor y hacen falta 5 (importa el CSV del sensor y anota hora, dosis y raciones de las comidas). Mientras tanto la previsión usa solo los valores de Ajustes y se corrige con las lecturas del día.
@@ -265,6 +286,35 @@
     </p>
   </section>
 }
+
+<section class="card">
+  <h2>Corrección con inteligencia artificial <small class="muted">(experimental)</small></h2>
+  <p class="muted small">
+    Una red neuronal muy pequeña (TensorFlow.js) puede aprender el error que aún comete la previsión respecto al sensor de este niño y corregirlo.
+    Está <strong>desactivada</strong> por defecto. Se entrena en este dispositivo (los datos no salen de él), mueve la curva como máximo ±{{ aiMaxCorr }} mg/dL,
+    solo se aplica si en comidas que no vio al entrenar mejora al menos un {{ aiMinGain }} % al modelo base, y no cambia ningún cálculo de dosis.
+    El interruptor vale para este dispositivo y este niño.
+  </p>
+  <label class="check">
+    <input type="checkbox" role="switch" [checked]="ai.enabled()" (change)="ai.setEnabled($any($event.target).checked)" />
+    Activar la corrección con inteligencia artificial
+  </label>
+  @if (ai.readiness(); as r) {
+    @if (r.ready) {
+      <p class="muted small">Hay datos suficientes: {{ r.episodes }} comidas con curva del sensor en {{ r.days }} días ({{ r.samples }} comparaciones).</p>
+    } @else {
+      <p class="muted small">Todavía no hay datos suficientes para que sea fiable: {{ r.missing.join('; ') }}.</p>
+    }
+  } @else {
+    <p class="muted small">Se comprobará si hay datos suficientes cuando se cargue el historial (se carga al abrir un día o esta pantalla).</p>
+  }
+  @if (ai.enabled() && ai.message()) {
+    <p class="muted small" [class.warn-text]="ai.status() === 'error' || ai.status() === 'rejected'" role="status">{{ ai.message() }}</p>
+  }
+  @if (ai.status() === 'active') {
+    <p class="muted small">Es informativo: no sustituye al sensor, a la medición ni a la pauta del equipo médico.</p>
+  }
+</section>
 
 <section class="card">
   <h2>Avisos entre cuidadores</h2>

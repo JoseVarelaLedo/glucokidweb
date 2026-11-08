@@ -12,18 +12,22 @@
  * reduce de verdad el error. NO cambia Ajustes: solo corrige la previsión.
  */
 import { Arrow, DayRecord, Food, Meal, Settings } from './models';
-import { ARROW_RATE, MOMENTUM_TAU_MIN, ModelFit, NO_FIT, dayEvents, effectParts, fitKey, iobAt, sanitizeModel, sensorPoints, toMin } from './predict';
+import { ARROW_RATE, MOMENTUM_TAU_MIN, ModelFit, NO_FIT, SLOTS, Slot, SlotFit, dayEvents, effectParts, fitKey, iobAt, sanitizeModel, sensorPoints, slotOf, toMin } from './predict';
 
 export const FIT_MIN_EPISODES = 5;
 export const FIT_MIN_POINTS = 25;
 export const FIT_MIN_GAIN = 0.03; // el error debe bajar al menos un 3 %
 export const FIT_PRIOR_N = 6; // «observaciones» que pesa la configuración actual frente a los datos
+export const SLOT_PRIOR_N = 8; // idem, para una franja frente al ajuste general
+export const SLOT_MIN_EPISODES = 4;
 export const FIT_LIMITS: [number, number] = [0.25, 1.6];
 const GRID_STEP = 20;
 const GRID_FIRST = 20;
 const NEAR_MIN = 7; // la lectura del sensor debe estar a ≤ 7 min del instante
 
-interface Obs {
+export interface Obs {
+  ep: string; // comida a la que pertenece (para la validación cruzada)
+  slot: Slot;
   x1: number; // efecto de los hidratos (mg/dL), sin ajustar
   x2: number; // −efecto de la insulina (mg/dL), sin ajustar
   y: number; // lo que cambió de verdad respecto al ancla, quitada la inercia de la flecha
@@ -94,7 +98,7 @@ export function collectObs(days: DayRecord[], s: Settings, foods: Food[]): { obs
         if (gs === null) continue;
         const p = effectParts(ev, t, isf, gPerUnit, model, horizon);
         const mom = rate * MOMENTUM_TAU_MIN * (1 - Math.exp(-(t - t0) / MOMENTUM_TAU_MIN));
-        obs.push({ x1: p.c - p0.c, x2: -(p.i - p0.i), y: gs - g0 - mom });
+        obs.push({ ep: `${day.date}|${m.injectionId}`, slot: slotOf(t0), x1: p.c - p0.c, x2: -(p.i - p0.i), y: gs - g0 - mom });
         used++;
       }
       if (used >= 3) episodes++;
@@ -111,21 +115,22 @@ function rmse(obs: Obs[], a: number, b: number): number {
   return Math.sqrt(s2 / obs.length);
 }
 
-/** Mínimos cuadrados con pesos de Huber y atracción hacia (1, 1). */
-export function solve(obs: Obs[]): { a: number; b: number } {
+/** Mínimos cuadrados con pesos de Huber y atracción hacia `center` (por defecto, la configuración de Ajustes: 1, 1). */
+export function solve(obs: Obs[], center: { a: number; b: number } = { a: 1, b: 1 }, priorN: number = FIT_PRIOR_N): { a: number; b: number } {
   const n = obs.length;
+  if (!n) return { ...center };
   const m1 = obs.reduce((t, o) => t + o.x1 * o.x1, 0) / n;
   const m2 = obs.reduce((t, o) => t + o.x2 * o.x2, 0) / n;
-  const l1 = FIT_PRIOR_N * m1;
-  const l2 = FIT_PRIOR_N * m2;
-  let a = 1;
-  let b = 1;
+  const l1 = priorN * m1;
+  const l2 = priorN * m2;
+  let a = center.a;
+  let b = center.b;
   for (let it = 0; it < 4; it++) {
     let s11 = l1;
     let s22 = l2;
     let s12 = 0;
-    let r1 = l1; // + Σ w·x1·y
-    let r2 = l2;
+    let r1 = l1 * center.a;
+    let r2 = l2 * center.b;
     for (const o of obs) {
       const res = Math.abs(o.y - (a * o.x1 + b * o.x2));
       const w = res > 40 ? 40 / res : 1;
@@ -145,22 +150,55 @@ export function solve(obs: Obs[]): { a: number; b: number } {
   return { a, b };
 }
 
+/** Error (RMSE) de validación cruzada «dejando una comida fuera»: se ajusta sin ella y se mide en ella. */
+export function cvRmse(obs: Obs[], center: { a: number; b: number }, priorN: number): number {
+  if (!obs.length) return 0;
+  const ids = [...new Set(obs.map((o) => o.ep))];
+  let s2 = 0;
+  for (const id of ids) {
+    const train = obs.filter((o) => o.ep !== id);
+    const { a, b } = solve(train, center, priorN);
+    for (const o of obs) if (o.ep === id) s2 += (o.y - (a * o.x1 + b * o.x2)) ** 2;
+  }
+  return Math.sqrt(s2 / obs.length);
+}
+
+const r2 = (x: number): number => Math.round(x * 100) / 100;
+
 export function fitModel(days: DayRecord[], s: Settings, foods: Food[]): ModelFit {
   const key = fitKey(s);
   const { obs, episodes } = collectObs(days, s, foods);
-  if (episodes < FIT_MIN_EPISODES || obs.length < FIT_MIN_POINTS) return { ...NO_FIT, key, episodes, points: obs.length };
-  const { a, b } = solve(obs);
+  if (episodes < FIT_MIN_EPISODES || obs.length < FIT_MIN_POINTS) return { ...NO_FIT, key, episodes, points: obs.length, slots: {} };
+
+  // 1) ajuste general
+  const g = solve(obs);
   const before = rmse(obs, 1, 1);
-  const after = rmse(obs, a, b);
-  const gain = before > 0 ? 1 - after / before : 0;
-  return {
-    active: gain >= FIT_MIN_GAIN,
-    a: Math.round(a * 100) / 100,
-    b: Math.round(b * 100) / 100,
-    episodes,
-    points: obs.length,
-    key,
-    rmseBefore: Math.round(before),
-    rmseAfter: Math.round(after),
-  };
+  const cv = cvRmse(obs, { a: 1, b: 1 }, FIT_PRIOR_N);
+  const active = before > 0 && 1 - cv / before >= FIT_MIN_GAIN;
+  const ga = active ? g.a : 1;
+  const gb = active ? g.b : 1;
+
+  // 2) ajuste por franja del día, atraído hacia el general; solo si mejora al general en validación cruzada
+  const slots: Partial<Record<Slot, SlotFit>> = {};
+  for (const sl of SLOTS) {
+    const o = obs.filter((x) => x.slot === sl.id);
+    const eps = new Set(o.map((x) => x.ep)).size;
+    if (eps < SLOT_MIN_EPISODES) {
+      slots[sl.id] = { active: false, a: r2(ga), b: r2(gb), episodes: eps, points: o.length, rmseBefore: null, rmseAfter: null };
+      continue;
+    }
+    const base = rmse(o, ga, gb);
+    const cvS = cvRmse(o, { a: ga, b: gb }, SLOT_PRIOR_N);
+    const fa = solve(o, { a: ga, b: gb }, SLOT_PRIOR_N);
+    slots[sl.id] = {
+      active: base > 0 && 1 - cvS / base >= FIT_MIN_GAIN,
+      a: r2(fa.a),
+      b: r2(fa.b),
+      episodes: eps,
+      points: o.length,
+      rmseBefore: Math.round(base),
+      rmseAfter: Math.round(cvS),
+    };
+  }
+  return { active, a: r2(g.a), b: r2(g.b), episodes, points: obs.length, key, rmseBefore: Math.round(before), rmseAfter: Math.round(cv), slots };
 }
