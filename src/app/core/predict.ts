@@ -283,6 +283,8 @@ export interface InsulinEvent {
   label: string;
 }
 export interface CarbEvent {
+  /** Comida de la que sale (si la hay): sirve para no perder los hidratos que se toman ANTES de inyectar. */
+  mealId?: string;
   t: number;
   grams: number;
   durationMin: number;
@@ -319,7 +321,7 @@ export function dayEvents(day: DayRecord, s: Settings, foods: Food[]): DayEvents
       }
       if (c.grams > 0) {
         if (tFood === null) out.issues.push({ mealId: m.injectionId, text: `${m.name}: falta la hora de la comida.` });
-        else out.carbs.push({ t: tFood, grams: c.grams, durationMin: c.hasFat ? model.carbMinFat : model.carbMin, label: m.name });
+        else out.carbs.push({ mealId: m.injectionId, t: tFood, grams: c.grams, durationMin: c.hasFat ? model.carbMinFat : model.carbMin, label: m.name });
       }
     }
   }
@@ -530,7 +532,8 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
       recs,
     };
 
-    const myCarbs = events.carbs.filter((c) => c.t >= t0 - 1 && c.t < horizon);
+    // los hidratos de esta comida cuentan aunque se empiecen a tomar antes de inyectar (inyección tardía o «pre-bolus» negativo)
+    const myCarbs = events.carbs.filter((c) => c.mealId === m.injectionId || (c.t >= t0 - 1 && c.t < horizon));
     const myIns = events.insulin.filter((i) => i.t >= t0 - 1 && i.t < horizon);
 
     // --- Precondiciones: cuándo NO se predice ---
@@ -932,4 +935,3 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
-

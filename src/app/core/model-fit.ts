@@ -82,7 +82,7 @@ export function collectObs(days: DayRecord[], s: Settings, foods: Food[]): { obs
       const nextT = k + 1 < anchors.length ? anchors[k + 1].t0 : Infinity;
       const horizon = Math.min(t0 + model.diaMin, nextT);
       if (g0 < 70) continue;
-      const myCarbs = ev.carbs.filter((c) => c.t >= t0 - 1 && c.t < horizon);
+      const myCarbs = ev.carbs.filter((c) => c.mealId === m.injectionId || (c.t >= t0 - 1 && c.t < horizon));
       const myIns = ev.insulin.filter((i) => i.t >= t0 - 1 && i.t < horizon);
       if (!myCarbs.length && !myIns.length) continue;
       // datos que no se pueden interpretar: hidratos sin dosis anotada, ejercicio, comidas sin hora
