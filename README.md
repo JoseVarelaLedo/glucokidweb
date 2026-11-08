@@ -252,6 +252,8 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
   (raciones de más, dosis sin anotar o con otra hora, factor de sensibilidad o relación raciones/unidades en Ajustes).
 - **Límite por abajo**: si el modelo bajara de **40 mg/dL** (`PRED_MIN_PLAUSIBLE`), tampoco se dibuja ni se avisa con esa cifra: se explica que el factor de sensibilidad o la ratio de Ajustes no encajan.
   Si la previsión de hipoglucemia sale solo de Ajustes (sin lecturas posteriores ni ajuste con el sensor), el aviso pasa de «alerta» a «atención» y se aclara que la cifra puede estar exagerada.
+- **Hora de la comida**: el modelo usa la hora de la inyección para la insulina y la de «Hora a la que va a comer» para los hidratos, de modo que la espera entre ambas cuenta (esperar baja el pico y adelanta la bajada).
+  Si esa hora está vacía se supone que se come justo al inyectar y, en las comidas con dosis e hidratos, la previsión lo indica con un aviso informativo. Los hidratos que se toman antes de inyectar también cuentan para su comida.
 - **Hidratos sin dosis**: si una comida tiene hidratos pero **no hay unidades anotadas** (campo vacío), no se calcula previsión y se pide anotarlas (0 U si de verdad no se puso insulina).
 - Es informativo, no es un producto sanitario y no sustituye a la medición ni al equipo médico.
 

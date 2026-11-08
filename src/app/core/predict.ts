@@ -785,6 +785,17 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
       });
     }
 
+    // R7b · sin hora de comida: se supone que se empieza a comer al inyectar (espera 0 min)
+    if ((m.before.units ?? 0) > 0 && carbG > 0 && toMin(m.foodTime) === null) {
+      recs.push({
+        level: 'info',
+        code: 'sin-hora-comida',
+        text:
+          `${m.name}: no consta la hora a la que se empezó a comer, así que la previsión supone que fue justo al inyectar (espera de 0 min). ` +
+          `Si esperasteis antes de comer, anótala en «Hora a la que va a comer»: la curva cambia (el pico suele salir más bajo y la bajada antes).`,
+      });
+    }
+
     // R8 · calidad de datos
     for (const i of mealIssues) recs.push({ level: 'info', code: 'dato', text: i.text });
     if (cls?.cls === 'hiper' || g0 > 350) {
