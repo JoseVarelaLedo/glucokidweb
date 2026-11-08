@@ -11,7 +11,10 @@
  *  - TensorFlow.js se descarga solo cuando se activa (carga diferida), para no cargar la aplicación.
  * Es informativo: no sustituye al sensor, a la medición ni al equipo médico.
  */
-import type * as TFNS from '@tensorflow/tfjs';
+// Se usan los paquetes sueltos (core + layers + backend CPU) y NO `@tensorflow/tfjs`: éste arrastra `tfjs-data` → `string_decoder` → `safe-buffer`,
+// que necesita el módulo `buffer` de Node y rompe la compilación para el navegador.
+import type * as CORE from '@tensorflow/tfjs-core';
+import type * as LAYERS from '@tensorflow/tfjs-layers';
 import { DayRecord, Food, Settings } from './models';
 import { ModelFit, ResidualCtx, ResidualHook, SLOTS, Slot, analyzeDay, sensorPoints, slotOf } from './predict';
 
@@ -141,7 +144,7 @@ const clampN = (v: number, m: number): number => Math.max(-m, Math.min(m, v));
 /** Entrena la red (carga TensorFlow.js la primera vez). Las comidas más recientes (25 %) se reservan para validar. */
 export async function trainResidual(ds: Dataset, progress?: (msg: string) => void): Promise<TrainResult> {
   progress?.('Cargando TensorFlow.js…');
-  const tf: typeof TFNS = await import('@tensorflow/tfjs');
+  const [tf, tfl] = await Promise.all([import('@tensorflow/tfjs-core'), import('@tensorflow/tfjs-layers'), import('@tensorflow/tfjs-backend-cpu')]);
   await tf.setBackend('cpu'); // un modelo diminuto: la CPU basta y evita crear contextos gráficos
   await tf.ready();
 
@@ -154,17 +157,17 @@ export async function trainResidual(ds: Dataset, progress?: (msg: string) => voi
   const out: TrainResult = { useful: false, samples: ds.samples.length, episodes: order.length, valBase: 0, valModel: 0, hook: null, dispose: () => undefined };
   if (train.length < 100 || val.length < 40) return out;
 
-  const build = (): TFNS.Sequential => {
-    const m = tf.sequential();
-    m.add(tf.layers.dense({ units: 12, activation: 'relu', inputShape: [N_FEATURES], kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }) }));
-    m.add(tf.layers.dense({ units: 6, activation: 'relu', kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }) }));
-    m.add(tf.layers.dense({ units: 1 }));
+  const build = (): LAYERS.Sequential => {
+    const m = tfl.sequential();
+    m.add(tfl.layers.dense({ units: 12, activation: 'relu', inputShape: [N_FEATURES], kernelRegularizer: tfl.regularizers.l2({ l2: 0.01 }) }));
+    m.add(tfl.layers.dense({ units: 6, activation: 'relu', kernelRegularizer: tfl.regularizers.l2({ l2: 0.01 }) }));
+    m.add(tfl.layers.dense({ units: 1 }));
     m.compile({ optimizer: tf.train.adam(0.01), loss: 'meanSquaredError' });
     return m;
   };
   const toT = (a: Sample[]) => ({ x: tf.tensor2d(a.map((s) => s.x)), y: tf.tensor2d(a.map((s) => [clampN(s.y, 120) / MAX_CORR])) });
-  const predict = (m: TFNS.Sequential, a: Sample[]): number[] =>
-    tf.tidy(() => Array.from((m.predict(tf.tensor2d(a.map((s) => s.x))) as TFNS.Tensor).dataSync()).map((v) => clampN(v * MAX_CORR, MAX_CORR)));
+  const predict = (m: LAYERS.Sequential, a: Sample[]): number[] =>
+    tf.tidy(() => Array.from((m.predict(tf.tensor2d(a.map((s) => s.x))) as CORE.Tensor).dataSync()).map((v) => clampN(v * MAX_CORR, MAX_CORR)));
   const rmseOf = (a: Sample[], c: number[]): number => Math.sqrt(a.reduce((s, x, i) => s + (x.y - c[i]) ** 2, 0) / a.length);
 
   progress?.('Entrenando con las comidas anteriores…');
@@ -177,7 +180,7 @@ export async function trainResidual(ds: Dataset, progress?: (msg: string) => voi
     shuffle: true,
     validationData: [va.x, va.y],
     verbose: 0,
-    callbacks: [tf.callbacks.earlyStopping({ monitor: 'val_loss', patience: 12 })],
+    callbacks: [tfl.callbacks.earlyStopping({ monitor: 'val_loss', patience: 12 })],
   });
   const bestEpochs = Math.max(10, hist.epoch.length - 12);
   out.valBase = rmseOf(val, val.map(() => 0));
@@ -197,7 +200,7 @@ export async function trainResidual(ds: Dataset, progress?: (msg: string) => voi
     if (!hs.length) return [];
     const x = hs.map((h, i) => features(ctx, h, deltas[i]));
     return tf.tidy(() => {
-      const raw = Array.from((model.predict(tf.tensor2d(x)) as TFNS.Tensor).dataSync());
+      const raw = Array.from((model.predict(tf.tensor2d(x)) as CORE.Tensor).dataSync());
       // en el ancla (h = 0) la corrección es cero y entra poco a poco (la glucemia inicial es una medición)
       return raw.map((v, i) => clampN(v * MAX_CORR, MAX_CORR) * Math.min(1, hs[i] / 30));
     });

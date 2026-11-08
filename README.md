@@ -188,6 +188,7 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 - La copia de seguridad completa (días, ajustes, alimentos y docs) sigue en *Ajustes → Copia de seguridad*.
 
 ### Fiabilidad del monitor frente al capilar
+
 - Pestaña **Monitor** del registro. Cada capilar con una lectura del monitor a menos de 10 minutos forma un **par**; de los pares se aprende, con
   estadística robusta y prudente, cuánto y en qué condiciones difiere el monitor del capilar (nivel de glucemia, flecha de tendencia y **día de vida del sensor**).
 - **Cambio de sensor**: se anota la fecha en la pestaña Monitor (se guarda en `settings.sensors`); el registro muestra «sensor día N».
@@ -257,7 +258,8 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
 ### Corrección con inteligencia artificial (TensorFlow.js, opcional)
 
 - Código: `core/residual-ai.ts` (datos, comprobación y red) y `core/residual-ai.service.ts` (interruptor, entrenamiento y aviso). **Está desactivada por defecto.**
-- **Instalación**: `npm install @tensorflow/tfjs`. Se descarga solo al activar el interruptor (carga diferida), así que no pesa en el arranque de la aplicación.
+- **Instalación**: `npm install @tensorflow/tfjs-core @tensorflow/tfjs-layers @tensorflow/tfjs-backend-cpu` (y **no** `@tensorflow/tfjs`: éste arrastra `tfjs-data` → `string_decoder` → `safe-buffer`, que necesita el módulo `buffer` de Node y rompe la compilación para el navegador, p. ej. en Netlify).
+  Se descarga solo al activar el interruptor (carga diferida), así que no pesa en el arranque de la aplicación.
 - **Qué aprende**: el error que aún comete el modelo (con su ajuste por franjas) respecto al sensor del niño, a partir de la hora, la glucemia y flecha iniciales, hidratos, dosis, insulina activa, grasas y la propia previsión.
   Red de 3 capas (12-6-1) entrenada en el dispositivo (CPU); los datos no salen de él. Su efecto se limita a **±40 mg/dL** y es 0 en el ancla.
 - **Cuándo se ofrece** (`readiness`): al menos 45 comidas con curva del sensor, 14 días distintos, 450 comparaciones previsto-real, 2 franjas del día con 12 comidas o más, y que el modelo base aún tenga un error medio de 12 mg/dL o más
