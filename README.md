@@ -254,6 +254,16 @@ por su nombre (alarga la absorción en la curva prevista): si lo renombras, actu
   Si la previsión de hipoglucemia sale solo de Ajustes (sin lecturas posteriores ni ajuste con el sensor), el aviso pasa de «alerta» a «atención» y se aclara que la cifra puede estar exagerada.
 - **Hora de la comida**: el modelo usa la hora de la inyección para la insulina y la de «Hora a la que va a comer» para los hidratos, de modo que la espera entre ambas cuenta (esperar baja el pico y adelanta la bajada).
   Si esa hora está vacía se supone que se come justo al inyectar y, en las comidas con dosis e hidratos, la previsión lo indica con un aviso informativo. Los hidratos que se toman antes de inyectar también cuentan para su comida.
+- **Hora sugerida para empezar a comer** (`core/meal-wait.ts`, componente `shared/wait-hint.ts`): bajo «Hora a la que va a comer», en el día de hoy y cuando la comida ya tiene hora, glucemia y dosis de rápida pero no hora de comida, se propone una hora con la leyenda
+  «De acuerdo a los datos aprendidos, la hora recomendada para empezar a comer es…». Es solo informativa: no cambia dosis ni rellena el campo.
+  Se simula la glucemia para cada espera (0, 5, 10… hasta el tope) con el modelo ya ajustado a las curvas del sensor y se elige la que deja la curva prevista más tiempo en rango, penalizando las bajadas más que las subidas; a igualdad, la espera más corta.
+  Tiene en cuenta la glucemia y su flecha, la insulina rápida aún activa (y cuánto hace de la última dosis), los hidratos de la comida anterior sin absorber (y cuánto hace de ella) y las raciones de la comida (las anotadas o, si no hay, las previstas en Ajustes).
+
+  - **Reglas de seguridad**: con glucemia por debajo de 90, o con flecha a la baja por debajo de 150, la recomendación es no esperar; por debajo de 70 no se sugiere nada y se remite al protocolo del equipo médico.
+  - **Qué aprende**: el ajuste del modelo por franjas del día; la espera máxima que se sugiere, que sale de las esperas que se han anotado (percentil 90, entre 10 y 30 min; 20 min mientras haya menos de 5); y una comparación con vuestro historial
+    (subida de la glucemia con espera de 10 min o más frente a menos de 10 min, si hay al menos 6 comidas de cada tipo con curva del sensor).
+  - **Cuándo se ofrece**: con el modelo ajustado con al menos 20 comidas con curva del sensor y la previsión evaluada (con suficientes comparaciones y un margen de error no demasiado ancho). Hasta entonces se indica qué falta.
+
 - **Hidratos sin dosis**: si una comida tiene hidratos pero **no hay unidades anotadas** (campo vacío), no se calcula previsión y se pide anotarlas (0 U si de verdad no se puso insulina).
 - Es informativo, no es un producto sanitario y no sustituye a la medición ni al equipo médico.
 

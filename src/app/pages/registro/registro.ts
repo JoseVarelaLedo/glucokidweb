@@ -22,6 +22,7 @@ import { sensorDayOf } from '../../core/calibration';
 import { Period } from '../../core/evolution';
 import { ReportPanel } from '../../shared/report';
 import { ReadingEditor } from '../../shared/reading-editor';
+import { WaitHint } from '../../shared/wait-hint';
 
 const ACTIVITY_SUGGESTIONS = [
   'Fútbol',
@@ -37,7 +38,7 @@ const ACTIVITY_SUGGESTIONS = [
 
 @Component({
   selector: 'app-registro',
-  imports: [FormsModule, NgTemplateOutlet, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport, ReportPanel],
+  imports: [FormsModule, NgTemplateOutlet, Calendar, ReadingEditor, DayCurve, FoodPicker, DaySnapshot, Evolution, MonitorPanel, SensorImport, ReportPanel, WaitHint],
   templateUrl: './registro.html',
 })
 export class Registro implements OnInit, DoCheck, OnDestroy {

@@ -154,6 +154,7 @@
                         <button type="button" class="chip-btn" (click)="setNow(m)">Ahora</button>
                       </div>
                     </div>
+                    <app-wait-hint [day]="d" [meal]="m" />
                     @for (it of m.items; track it.id) {
                       <div class="item-row">
                         <app-food-picker [foods]="data.foods()" [gramsPerRation]="gramsPerRation()" [(value)]="it.name" />
