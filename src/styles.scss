@@ -1231,6 +1231,29 @@ input[type='range'] {
   font-size: 0.78rem;
   color: var(--muted);
   margin: 6px 0;
+  .lg-toggle {
+    // elementos de la leyenda que se pueden ocultar: botones discretos que heredan el aspecto de la leyenda
+    appearance: none;
+    background: none;
+    border: 0;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    &:hover {
+      background: color-mix(in srgb, var(--text) 8%, transparent);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    &.off {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
+  }
   .lg {
     display: inline-block;
     vertical-align: middle;

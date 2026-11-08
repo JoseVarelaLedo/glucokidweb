@@ -40,6 +40,9 @@ const KIND_LABEL: Record<MeasuredPoint['kind'], string> = {
   ejercicio: 'Ejercicio',
 };
 
+/** Elementos que se pueden ocultar (el sensor continuo y las dosis no). */
+type ChartLayer = 'medido' | 'previsto' | 'monitor' | 'capilar' | 'ejercicio';
+
 interface ScrubView {
   x: number;
   y: number;
@@ -113,16 +116,18 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
             <text [attr.x]="d.x + 3" [attr.y]="M.t + 10 + d.row * 11" class="dose-label">{{ d.text }}</text>
           }
 
-          <!-- bandas de incertidumbre (donde cayó el 80 % de los casos parecidos) -->
-          @for (c of g.curves; track c.name) {
-            @if (c.band) {
-              <path [attr.d]="c.band" class="pred-band" />
+          @if (show('previsto')) {
+            <!-- bandas de incertidumbre (donde cayó el 80 % de los casos parecidos) -->
+            @for (c of g.curves; track c.name) {
+              @if (c.band) {
+                <path [attr.d]="c.band" class="pred-band" />
+              }
             }
-          }
 
-          <!-- curvas previstas -->
-          @for (c of g.curves; track c.name) {
-            <path [attr.d]="c.d" class="pred" />
+            <!-- curvas previstas -->
+            @for (c of g.curves; track c.name) {
+              <path [attr.d]="c.d" class="pred" />
+            }
           }
 
           <!-- sensor continuo (importado del CSV del monitor) -->
@@ -131,8 +136,11 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
           }
 
           <!-- medido -->
-          <path [attr.d]="g.line" class="measured" />
+          @if (show('medido')) {
+            <path [attr.d]="g.line" class="measured" />
+          }
           @for (p of g.dots; track p.index) {
+           @if (showKind(p.p.kind)) {
             @switch (p.shape) {
               @case ('diamond') {
                 <rect
@@ -148,6 +156,7 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
                 <circle [attr.cx]="p.x" [attr.cy]="p.y" r="5.5" [attr.fill]="p.color" class="dot" (click)="pick(p.index)" />
               }
             }
+           }
           }
 
           <!-- punto que recorre la curva -->
@@ -176,18 +185,24 @@ function nearest(a: ReadonlyArray<{ t: number }>, t: number): number {
           @if (g.sensorPaths.length) {
             <span><i class="lg sensor"></i> Sensor continuo</span>
           }
-          <span><i class="lg line"></i> Medido</span>
-          <span><i class="lg dash"></i> Previsto</span>
-          @if (g.hasBand) {
+          <button type="button" class="lg-toggle" [class.off]="!show('medido')" [attr.aria-pressed]="show('medido')" (click)="toggle('medido')"><i class="lg line"></i> Medido</button>
+          <button type="button" class="lg-toggle" [class.off]="!show('previsto')" [attr.aria-pressed]="show('previsto')" (click)="toggle('previsto')"><i class="lg dash"></i> Previsto</button>
+          @if (g.hasBand && show('previsto')) {
             <span><i class="lg band"></i> Banda: donde cayó el 80 % de casos parecidos</span>
           }
-          <span><i class="lg dot"></i> Monitor / comida</span>
-          <span><i class="lg dia"></i> Capilar</span>
-          <span><i class="lg tri"></i> Ejercicio</span>
+          <button type="button" class="lg-toggle" [class.off]="!show('monitor')" [attr.aria-pressed]="show('monitor')" (click)="toggle('monitor')"><i class="lg dot"></i> Monitor / comida</button>
+          <button type="button" class="lg-toggle" [class.off]="!show('capilar')" [attr.aria-pressed]="show('capilar')" (click)="toggle('capilar')"><i class="lg dia"></i> Capilar</button>
+          <button type="button" class="lg-toggle" [class.off]="!show('ejercicio')" [attr.aria-pressed]="show('ejercicio')" (click)="toggle('ejercicio')"><i class="lg tri"></i> Ejercicio</button>
           <span><i class="lg dose"></i> Dosis</span>
         </div>
+        @if (hidden().size) {
+          <p class="muted small">
+            Hay elementos ocultos (solo en pantalla; no cambia ningún dato). El sensor continuo y las dosis siempre se ven.
+            <button type="button" class="btn ghost small" (click)="showAll()">Mostrar todo</button>
+          </p>
+        }
 
-        @if (bandNote(g); as n) {
+        @if (show('previsto') && bandNote(g); as n) {
           <p class="small band-note" [class.band-warn]="n.warn" role="status">{{ n.text }}</p>
         }
 
@@ -241,10 +256,33 @@ export class GlucoseChart {
   protected readonly kindLabel = (k: MeasuredPoint['kind']) => KIND_LABEL[k];
   private readonly selIdx = signal<number | null>(null);
 
+  /**
+   * Elementos ocultos a voluntad (solo a la vista, no cambia ningún dato ni cálculo). El sensor continuo y las dosis no se pueden ocultar.
+   * Se recuerdan solo mientras la pantalla está abierta, para no confundir una curva «que falta» con un fallo.
+   */
+  protected readonly hidden = signal<ReadonlySet<ChartLayer>>(new Set());
+  protected show(l: ChartLayer): boolean {
+    return !this.hidden().has(l);
+  }
+  protected showKind(k: MeasuredPoint['kind']): boolean {
+    return this.show(k === 'capilar' ? 'capilar' : k === 'ejercicio' ? 'ejercicio' : 'monitor');
+  }
+  protected toggle(l: ChartLayer): void {
+    this.hidden.update((s) => {
+      const n = new Set(s);
+      if (!n.delete(l)) n.add(l);
+      return n;
+    });
+  }
+  protected showAll(): void {
+    this.hidden.set(new Set());
+  }
+
   protected readonly sel = computed(() => {
     const i = this.selIdx();
     const a = this.analysis();
-    return i === null ? null : (a.measured[i] ?? null);
+    const p = i === null ? null : (a.measured[i] ?? null);
+    return p && this.showKind(p.kind) ? p : null;
   });
 
   /** Punto de la curva que se está recorriendo (índice en `scrub`). */
