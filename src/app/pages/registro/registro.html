@@ -175,7 +175,7 @@
                     }
                     @if (m.items.length) {
                       <p class="muted small">
-                        Anotado: <strong>{{ fmt(rationsTotal(m)) }}</strong> raciones (≈ {{ fmt(rationsTotal(m) * gramsPerRation(), 0) }} g de hidratos).
+                        Anotado: <strong>{{ fmt(rationsTotal(m)) }}</strong> raciones de carbohidratos (≈ {{ fmt(rationsTotal(m) * gramsPerRation(), 0) }} g de hidratos).
                       </p>
                     }
                     <button type="button" class="btn ghost" (click)="addItem(m)">+ Añadir alimento</button>
