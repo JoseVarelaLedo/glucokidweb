@@ -8,7 +8,7 @@ import { DataService } from '../../core/data.service';
 import { InjectionDef, RationPlan, Settings } from '../../core/models';
 import { fmtNum, round, uid } from '../../core/util';
 import { makeDefaultModel, planTotal } from '../../core/defaults';
-import { ISF_RULE, SLOTS, fitKey, sensitivityFactor } from '../../core/predict';
+import { ISF_RULE, SLOTS, fitKey, planCarbs, sensitivityFactor } from '../../core/predict';
 import { ResidualAiService } from '../../core/residual-ai.service';
 import { AI_MIN_GAIN, MAX_CORR } from '../../core/residual-ai';
 import { CalibrationService } from '../../core/calibration.service';
@@ -100,10 +100,10 @@ export class Ajustes implements DoCheck, OnDestroy {
     inj.plan = { ...(inj.plan ?? {}), [k]: v };
   }
 
-  /** Total de raciones previstas al día (solo comidas con insulina rápida) y gramos de hidratos que suponen. */
+  /** Raciones de hidratos previstas al día (harinas + fruta, sin verduras; solo comidas con insulina rápida) y gramos que suponen. */
   protected dayPlan(): { rations: number; grams: number } | null {
     const s = this.data.settings();
-    const rations = s.injections.filter((i) => i.kind === 'rapida').reduce((acc, i) => acc + planTotal(i.plan), 0);
+    const rations = s.injections.filter((i) => i.kind === 'rapida').reduce((acc, i) => acc + planCarbs(i.plan), 0);
     return rations > 0 ? { rations, grams: rations * (s.gramsPerRation || 10) } : null;
   }
 

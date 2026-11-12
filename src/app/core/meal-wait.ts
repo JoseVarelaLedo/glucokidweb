@@ -10,9 +10,8 @@
  * mucho mayor que la habitual) y, como contraste, lo que ha pasado en las comidas con espera frente a las comidas sin ella.
  * Solo se ofrece cuando hay datos suficientes (ver `waitGate`). No cambia ninguna dosis ni ningún cálculo.
  */
-import { planTotal } from './defaults';
 import { Arrow, DayRecord, Food, Meal, Settings } from './models';
-import { ModelFit, analyzeDay, carbAbsorbed, dayEvents, fmtTime, iobAt, sensorPoints, toMin } from './predict';
+import { ModelFit, analyzeDay, carbAbsorbed, dayEvents, fmtTime, iobAt, planCarbs, sensorPoints, toMin } from './predict';
 
 export const WAIT_STEP = 5;
 export const WAIT_MAX = 30; // min: tope absoluto de lo que se sugiere
@@ -127,8 +126,8 @@ export function adviseWait(day: DayRecord, meal: Meal, s: Settings, foods: Food[
   let usedPlan = false;
   let base: DayRecord = day;
   if (!hasItems) {
-    const planned = planTotal(s.injections.find((i) => i.id === meal.injectionId)?.plan);
-    if (!(planned > 0)) return { ok: false, reason: 'no hay raciones anotadas ni previstas para esta comida' };
+    const planned = planCarbs(s.injections.find((i) => i.id === meal.injectionId)?.plan);
+    if (!(planned > 0)) return { ok: false, reason: 'no hay raciones de hidratos anotadas ni previstas para esta comida' };
     usedPlan = true;
     const item = { id: 'wait-plan', name: 'Raciones previstas', quantity: '', rations: planned };
     base = { ...day, meals: day.meals.map((x) => (x === meal ? { ...x, items: [item] } : x)) } as DayRecord;

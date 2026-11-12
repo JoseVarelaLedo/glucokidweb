@@ -119,6 +119,7 @@ si tienes dudas, hazlo **privado**.
 ### Raciones
 
 - **Raciones previstas por comida** (harinas, verduras, fruta) configurables en *Ajustes*; se muestran como leyenda en el registro y en la calculadora.
+  Para las cuentas de hidratos (comparación con las raciones anotadas, total al día frente a la referencia por calorías, previsión) solo cuentan **harinas + fruta**: las verduras no cuentan, igual que los alimentos sin hidratos en las raciones anotadas.
 - En el registro, cada alimento se anota en **raciones** (con medias raciones); el modelo predictivo parte de ellas para calcular la desviación
   y las propuestas de corrección. Los registros antiguos con texto libre («200 g») siguen contando mediante el catálogo.
 - **Gramos por ración de cada alimento** (*Alimentos*): una ración son los gramos de hidratos de *Ajustes* (10 g por defecto). Lo que se guarda

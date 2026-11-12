@@ -76,7 +76,7 @@
   }
   @if (dayPlan(); as dp) {
     <p class="muted small">
-      Raciones previstas al día: <strong>{{ fmt(dp.rations) }}</strong> (≈ {{ fmt(dp.grams, 0) }} g de hidratos)
+      Raciones de hidratos previstas al día (sin verduras): <strong>{{ fmt(dp.rations) }}</strong> (≈ {{ fmt(dp.grams, 0) }} g de hidratos)
       @if (carbReference(); as ref) { · referencia por calorías: ≈ {{ fmt(ref, 0) }} g }
     </p>
   }

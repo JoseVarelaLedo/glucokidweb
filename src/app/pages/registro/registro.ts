@@ -10,7 +10,7 @@ import { Activity, DayMark, DayRecord, ExtraReading, FoodEntry, Meal, RationPlan
 import { addDays, canon, fmtNum, isClosedDay, nowTime, round, strToDate, todayStr, uid } from '../../core/util';
 import { AuthService } from '../../core/auth.service';
 import { PRE_ID, emptyReading, planTotal } from '../../core/defaults';
-import { findFood, mealRations } from '../../core/predict';
+import { findFood, mealRations, planCarbs } from '../../core/predict';
 import { Calendar } from '../../shared/calendar';
 import { FoodPicker } from '../../shared/food-picker';
 import { DayCurve } from '../../shared/day-curve';
@@ -338,8 +338,8 @@ export class Registro implements OnInit, DoCheck, OnDestroy {
   /** Raciones previstas para esta comida (Ajustes), o null si no se ha configurado nada. */
   protected plan(m: Meal): (RationPlan & { total: number }) | null {
     const p = this.data.settings().injections.find((i) => i.id === m.injectionId)?.plan;
-    const total = planTotal(p);
-    return p && total > 0 ? { ...p, total } : null;
+    // se enseña si hay algo previsto, pero el total es el de HIDRATOS (harinas + fruta): las verduras no cuentan
+    return p && planTotal(p) > 0 ? { ...p, total: planCarbs(p) } : null;
   }
 
   /** Gramos de un alimento del catálogo que equivalen a una ración (null si no tiene hidratos). */

@@ -144,7 +144,7 @@
                         @if (p.harinas) { <span class="chip">Harinas {{ fmt(p.harinas) }}</span> }
                         @if (p.verduras) { <span class="chip">Verduras {{ fmt(p.verduras) }}</span> }
                         @if (p.fruta) { <span class="chip">Fruta {{ fmt(p.fruta) }}</span> }
-                        · total {{ fmt(p.total) }} (≈ {{ fmt(p.total * gramsPerRation(), 0) }} g de hidratos). Se cambia en Ajustes.
+                        · hidratos: {{ fmt(p.total) }} raciones (≈ {{ fmt(p.total * gramsPerRation(), 0) }} g; las verduras no cuentan). Se cambia en Ajustes.
                       </p>
                     }
                     <div class="field">
@@ -175,7 +175,7 @@
                     }
                     @if (m.items.length) {
                       <p class="muted small">
-                        Anotado: <strong>{{ fmt(rationsTotal(m)) }}</strong> raciones de carbohidratos (≈ {{ fmt(rationsTotal(m) * gramsPerRation(), 0) }} g de hidratos).
+                        Anotado: <strong>{{ fmt(rationsTotal(m)) }}</strong> raciones de hidratos (≈ {{ fmt(rationsTotal(m) * gramsPerRation(), 0) }} g de hidratos).
                       </p>
                     }
                     <button type="button" class="btn ghost" (click)="addItem(m)">+ Añadir alimento</button>

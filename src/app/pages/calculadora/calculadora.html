@@ -154,7 +154,7 @@
           @if (tp.harinas) { <span class="chip">Harinas {{ fmt(tp.harinas) }}</span> }
           @if (tp.verduras) { <span class="chip">Verduras {{ fmt(tp.verduras) }}</span> }
           @if (tp.fruta) { <span class="chip">Fruta {{ fmt(tp.fruta) }}</span> }
-          · total {{ fmt(tp.total) }}.
+          · hidratos: {{ fmt(tp.total) }} raciones (las verduras no cuentan).
         </p>
       }
       <button type="button" class="btn" [disabled]="!targetId || stale()" (click)="transfer(res)">Añadir al registro</button>

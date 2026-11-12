@@ -5,6 +5,7 @@ import { CalcRow, CalcService } from '../../core/calc.service';
 import { DataService } from '../../core/data.service';
 import { CalcLine, CalcResult, DoseResult, RuleOf50, carbsFor, computeDose, ruleOf50 } from '../../core/dose';
 import { planTotal } from '../../core/defaults';
+import { planCarbs } from '../../core/predict';
 import { Food } from '../../core/models';
 import { FoodPicker } from '../../shared/food-picker';
 import { dayEvents, iobAt, correctionUnits, toMin } from '../../core/predict';
@@ -153,9 +154,9 @@ export class Calculadora implements OnInit {
   /** Raciones previstas para la comida elegida como destino (Ajustes), o null. */
   protected targetPlan(): { name: string; harinas: number; verduras: number; fruta: number; total: number } | null {
     const inj = this.rapidas().find((i) => i.id === this.targetId);
-    const total = planTotal(inj?.plan);
-    if (!inj || total <= 0) return null;
-    return { name: inj.name, harinas: inj.plan?.harinas ?? 0, verduras: inj.plan?.verduras ?? 0, fruta: inj.plan?.fruta ?? 0, total };
+    if (!inj || planTotal(inj.plan) <= 0) return null;
+    // el total es el de hidratos (harinas + fruta); las verduras se enseñan pero no cuentan
+    return { name: inj.name, harinas: inj.plan?.harinas ?? 0, verduras: inj.plan?.verduras ?? 0, fruta: inj.plan?.fruta ?? 0, total: planCarbs(inj.plan) };
   }
 
   protected async transfer(res: CalcResult): Promise<void> {

@@ -20,7 +20,7 @@
  * No es un dispositivo médico ni sustituye a la pauta del equipo de endocrinología.
  */
 import { signal } from '@angular/core';
-import { FOOD_GROUPS, makeDefaultModel, planTotal } from './defaults';
+import { FOOD_GROUPS, makeDefaultModel } from './defaults';
 import { classify } from './glucose';
 import { KALMAN, kInit, kPredict, kSd, kUpdate } from './kalman';
 import { Arrow, DayRecord, Food, Meal, PredictModel, Reading, Settings } from './models';
@@ -92,6 +92,14 @@ const FAT_GROUP: string = FOOD_GROUPS.find((g) => g.startsWith('Proteínas y gra
 export function isCarbFree(name: string | null | undefined, foods: Food[]): boolean {
   const f = findFood(name ?? '', foods);
   return !!f && f.carbsPer100g <= 0;
+}
+
+/**
+ * Raciones de HIDRATOS previstas en un plan de comida (Ajustes): harinas + fruta. Las verduras no cuentan, igual que los alimentos sin hidratos
+ * no cuentan en las raciones anotadas; si se sumaran, la comparación «anotadas frente a previstas» echaría en falta raciones que no son de hidratos.
+ */
+export function planCarbs(plan: { harinas?: number | null; fruta?: number | null } | null | undefined): number {
+  return (Number(plan?.harinas) || 0) + (Number(plan?.fruta) || 0);
 }
 
 /** Raciones de hidratos de una comida: las anotadas, sin las de alimentos sin hidratos. */
@@ -744,7 +752,7 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
     }
 
     // R4b · raciones anotadas frente a las previstas para esta comida (Ajustes)
-    const planned = planTotal(s.injections.find((i) => i.id === m.injectionId)?.plan);
+    const planned = planCarbs(s.injections.find((i) => i.id === m.injectionId)?.plan);
     if (planned > 0 && carbEstimate.matched > 0) {
       const diff = carbEstimate.rations - planned;
       if (Math.abs(diff) >= 1) {
@@ -753,7 +761,7 @@ export function analyzeDay(day: DayRecord, s: Settings, foods: Food[], fit: Mode
         recs.push({
           level: 'info',
           code: 'raciones-previstas',
-          text: `Raciones anotadas: ${fmt(carbEstimate.rations)}, ${fmt(Math.abs(diff))} ${diff < 0 ? 'menos' : 'más'} que las previstas (${fmt(planned)}). Esa diferencia equivale a ≈ ${fmt(units)} U${effect}: si la glucemia se desvió, puede explicarlo.`,
+          text: `Raciones de hidratos anotadas: ${fmt(carbEstimate.rations)}, ${fmt(Math.abs(diff))} ${diff < 0 ? 'menos' : 'más'} que las previstas (${fmt(planned)}; las verduras no cuentan). Esa diferencia equivale a ≈ ${fmt(units)} U${effect}: si la glucemia se desvió, puede explicarlo.`,
         });
       }
     }
@@ -946,3 +954,4 @@ export function sensitivityFactor(dailyRapid: number, dailyLenta: number, rule: 
 export function carbRatioHint(total: number): number | null {
   return total > 0 ? Math.round((500 / total) * 10) / 10 : null;
 }
+
